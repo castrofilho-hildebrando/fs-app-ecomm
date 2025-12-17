@@ -7,9 +7,17 @@ import { Order } from "../models/Order";
 import { OrderDomainService } from "../domain/services/OrderDomainService";
 import { CartEmptyError } from "../domain/errors/CheckoutErrors";
 
+import { EventBus } from "../domain/events/EventBus";
+import { OrderCreatedEvent } from "../domain/events/OrderCreatedEvent";
+
 export class CheckoutService {
 
     private readonly orderDomainService = new OrderDomainService();
+
+    constructor(
+
+        private readonly eventBus: EventBus
+    ) {}
 
     async execute(userId: string) {
         const session = await mongoose.startSession();
@@ -69,6 +77,17 @@ export class CheckoutService {
             // 8. Commit
             await session.commitTransaction();
             session.endSession();
+
+            // Publicar pedido
+            await this.eventBus.publish(
+
+                new OrderCreatedEvent(
+
+                    order._id.toString(),
+                    order.userId.toString(),
+                    order.total
+                )
+            );
 
             return order;
 

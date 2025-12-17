@@ -9,8 +9,10 @@ import { OrderDomainService } from "../domain/services/OrderDomainService";
 import { CheckoutService } from "../services/CheckoutService";
 import { DomainError } from "../domain/errors/DomainError";
 
+import { eventBus } from "../server";
+
 const orderDomainService = new OrderDomainService();
-const checkoutService = new CheckoutService();
+const checkoutService = new CheckoutService(eventBus);
 
 export const checkout = async (req: AuthRequest, res: Response) => {
 
