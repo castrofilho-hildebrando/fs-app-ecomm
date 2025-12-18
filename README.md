@@ -29,13 +29,7 @@ Este projeto é pensado para ser **lido**, não apenas executado.
 
 A arquitetura adotada é uma **variação pragmática de Clean Architecture + DDD**, adaptada para Node.js e MongoDB:
 
-Controllers (HTTP / Express)
-↓
-Application Services
-↓
-Domain (Entities, Domain Services, Events)
-↓
-Infrastructure (Mongoose, MongoDB, EventBus)
+Controllers (HTTP / Express) → Application Services → Domain (Entities, Domain Services, Events) → Infrastructure (Mongoose, MongoDB, EventBus)
 
 
 ### Princípios seguidos
