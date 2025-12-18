@@ -1,6 +1,7 @@
 import request from "supertest";
 import app from "../src/app";
 import { createTestUser, createTestProduct } from "./helpers/testHelpers";
+import { clearDatabase } from "./helpers/clearDatabase";
 import mongoose from "mongoose";
 import { Cart } from "../src/models/Cart";
 import { Order } from "../src/models/Order";
@@ -20,6 +21,8 @@ describe("Order Routes", () => {
     
     // Configuração robusta e paralela
     beforeEach(async () => {
+
+        clearDatabase();
         // Cria usuários e um produto base de forma eficiente
         const [user, admin, product] = await Promise.all([
             createTestUser("user"),

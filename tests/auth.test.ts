@@ -1,7 +1,10 @@
 import request from "supertest";
 import app from "../src/app";
 import { createTestUser } from "./helpers/testHelpers";
+import { clearDatabase } from "./helpers/clearDatabase";
 import "./setup";
+
+clearDatabase();
 
 describe("Auth Routes", () => {
     describe("POST /api/auth/register", () => {

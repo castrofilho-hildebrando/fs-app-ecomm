@@ -2,6 +2,7 @@ import request from "supertest";
 import app from "../src/app";
 import { Product } from "../src/models/Product"
 import { createTestUser, createTestProduct } from "./helpers/testHelpers";
+import { clearDatabase } from "./helpers/clearDatabase";
 import "./setup";
 
 describe("Product Routes", () => {
@@ -19,6 +20,8 @@ describe("Product Routes", () => {
     };
 
     beforeEach(async () => {
+
+        clearDatabase();
 
         const [user, admin] = await Promise.all([
             createTestUser("user", 'main'),

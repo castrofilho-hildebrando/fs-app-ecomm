@@ -1,7 +1,10 @@
 import request from "supertest";
 import app from "../src/app";
+import { clearDatabase } from "./helpers/clearDatabase";
 import { createTestUser, createTestProduct } from "./helpers/testHelpers";
 import "./setup";
+
+clearDatabase();
 
 describe("Cart Routes", () => {
     let userToken: string;

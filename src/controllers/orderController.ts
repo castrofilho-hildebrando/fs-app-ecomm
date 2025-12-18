@@ -9,7 +9,7 @@ import { OrderDomainService } from "../domain/services/OrderDomainService";
 import { CheckoutService } from "../services/CheckoutService";
 import { DomainError } from "../domain/errors/DomainError";
 
-import { eventBus } from "../server";
+import { eventBus } from "../infra/eventBus";
 
 const orderDomainService = new OrderDomainService();
 const checkoutService = new CheckoutService(eventBus);

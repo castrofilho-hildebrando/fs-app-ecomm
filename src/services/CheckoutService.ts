@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 
 import { Cart } from "../models/Cart";
 import { Product } from "../models/Product";
-import { Order } from "../models/Order";
+import { Order } from "../models/Order"
+import { Order as DomainOrder } from "../domain/entities/Order";
 
 import { OrderDomainService } from "../domain/services/OrderDomainService";
 import { CartEmptyError } from "../domain/errors/CheckoutErrors";
@@ -52,11 +53,25 @@ export class CheckoutService {
                 );
 
             // 5. Criar pedido
+            const domainOrder = new DomainOrder(
+
+                "pending",
+                cart.items.map(item => ({
+                    productId: item.productId.toString(),
+                    quantity: item.quantity,
+                    price: products.find(
+                        p => p._id.toString() === item.productId.toString()
+                    )!.price,
+                })),
+                total
+            );
+
+            // Persistência continua com Mongoose
             const order = new Order({
                 userId,
                 items: cart.items,
-                total,
-                status: "pending",
+                total: domainOrder.total,
+                status: domainOrder.status,
             });
 
             await order.save({ session });

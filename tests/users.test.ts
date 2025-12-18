@@ -1,6 +1,7 @@
 import request from 'supertest';
 import app from '../src/app';
 import { createTestUser } from './helpers/testHelpers';
+import { clearDatabase } from "./helpers/clearDatabase";
 import './setup';
 
 describe('User Routes', () => {
@@ -9,6 +10,8 @@ describe('User Routes', () => {
   let userId: string;
 
   beforeEach(async () => {
+
+    clearDatabase();
     const admin = await createTestUser('admin');
     const user = await createTestUser('user');
     adminToken = admin.token;
