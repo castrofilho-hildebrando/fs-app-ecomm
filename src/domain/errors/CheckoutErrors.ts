@@ -1,10 +1,10 @@
-import { DomainError } from "./DomainError";
+import { DomainError } from "./DomainError"
 
 export class CartEmptyError extends DomainError {
 
     constructor() {
 
-        super("CART_EMPTY", "Carrinho vazio");
+        super("CART_EMPTY", "Carrinho vazio")
     }
 }
 
@@ -18,7 +18,7 @@ export class ProductNotFoundError extends DomainError {
             productId
                 ? `Produto ${productId} não encontrado`
                 : "Produto não encontrado"
-        );
+        )
     }
 }
 
@@ -30,6 +30,6 @@ export class InsufficientStockError extends DomainError {
 
             "INSUFFICIENT_STOCK",
             `Estoque insuficiente para ${productName}. Disponível: ${available}, solicitado: ${requested}`
-        );
+        )
     }
 }

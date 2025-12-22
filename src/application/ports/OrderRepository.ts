@@ -12,6 +12,14 @@ export interface OrderRepository {
         createdAt: Date;
     }[]>;
 
+    findAll(): Promise<{
+        id: string;
+        userId: string;
+        status: string;
+        total: number;
+        createdAt: Date;
+    }[]>;
+
     create(data: {
         userId: string;
         items: { productId: string; quantity: number }[];

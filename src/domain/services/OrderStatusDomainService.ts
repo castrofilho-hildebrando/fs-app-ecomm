@@ -1,10 +1,10 @@
-import { DomainError } from "../errors/DomainError";
+import { DomainError } from "../errors/DomainError"
 
 const allowedTransitions: Record<string, string[]> = {
     pending: ["paid"],
     paid: ["shipped"],
     shipped: ["delivered"],
-};
+}
 
 export class OrderStatusDomainService {
 
@@ -12,12 +12,12 @@ export class OrderStatusDomainService {
         currentStatus: string,
         newStatus: string
     ) {
-        const allowed = allowedTransitions[currentStatus] || [];
+        const allowed = allowedTransitions[currentStatus] || []
 
         if (!allowed.includes(newStatus)) {
             throw new DomainError(
                 `Invalid status transition from ${currentStatus} to ${newStatus}`
-            );
+            )
         }
     }
 
@@ -27,7 +27,7 @@ export class OrderStatusDomainService {
         newStatus: string
     ) {
         if (actorRole !== "admin") {
-            throw new DomainError("Only admin can change order status");
+            throw new DomainError("Only admin can change order status")
         }
     }
 }

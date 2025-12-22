@@ -1,29 +1,29 @@
 // FILE: src/routes/addressRoutes.ts
 
-import { Router } from 'express';
-import { authenticate } from '../middlewares/authMiddleware'; 
+import { Router } from "express"
+import { authenticate } from "../middlewares/authMiddleware" 
 import { 
     createAddress, 
     getAddresses, 
     updateAddress, 
     deleteAddress 
-} from '../controllers/addressController';
+} from "../controllers/addressController"
 
-const router = Router();
+const router = Router()
 
 // Todas as rotas de endereço são protegidas por autenticação
-router.use(authenticate);
+router.use(authenticate)
 
 // POST /api/addresses - Criar endereço
-router.post('/', createAddress);
+router.post("/", createAddress)
 
 // GET /api/addresses - Listar endereços
-router.get('/', getAddresses);
+router.get("/", getAddresses)
 
 // PUT /api/addresses/:id - Atualizar endereço
-router.put('/:id', updateAddress);
+router.put("/:id", updateAddress)
 
 // DELETE /api/addresses/:id - Deletar endereço
-router.delete('/:id', deleteAddress);
+router.delete("/:id", deleteAddress)
 
-export default router;
+export default router

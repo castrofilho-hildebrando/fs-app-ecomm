@@ -1,4 +1,4 @@
-import { Schema, model, Document, Types } from "mongoose";
+import { Schema, model, Document, Types } from "mongoose"
 
 export interface ICart extends Document {
     userId: Types.ObjectId;
@@ -20,6 +20,6 @@ const CartSchema = new Schema<ICart>({
     ],
     // Adicionado no Schema para criar a data automaticamente
     createdAt: { type: Date, default: Date.now },
-});
+})
 
-export const Cart = model<ICart>("Cart", CartSchema);
+export const Cart = model<ICart>("Cart", CartSchema)

@@ -9,6 +9,18 @@ export type CartData = {
 };
 
 export interface CartRepository {
-    findByUserId(userId: string): Promise<CartData | null>;
-    clear(cartId: string): Promise<void>;
+
+    findByUserId(userId: string): Promise<{
+
+        items: { productId: string; quantity: number }[];
+    } | null>;
+
+    save(
+
+        userId: string,
+        items: { productId: string; quantity: number }[]
+    ): Promise<void>;
+
+    clearByUserId(userId: string): Promise<void>;
 }
+

@@ -10,4 +10,4 @@ module.exports = {
     coverageDirectory: "coverage",
     verbose: true,
     setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
-};
+}

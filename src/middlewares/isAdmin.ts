@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express"
 
 export const isAdmin = (
     req: Request,
@@ -6,14 +6,14 @@ export const isAdmin = (
     next: NextFunction,
 ) => {
     if (!req.user) {
-        return res.status(401).json({ error: "Usuário não autenticado" });
+        return res.status(401).json({ error: "Usuário não autenticado" })
     }
 
     if (req.user.role !== "admin") {
         return res
             .status(403)
-            .json({ error: "Acesso negado: apenas administradores" });
+            .json({ error: "Acesso negado: apenas administradores" })
     }
 
-    next();
-};
+    next()
+}

@@ -1,4 +1,4 @@
-import { DomainError } from "../errors/DomainError";
+import { DomainError } from "../errors/DomainError"
 
 export type OrderStatus =
   | "pending"
@@ -14,9 +14,11 @@ export interface OrderItem {
 
 export class Order {
 
-    private _status: OrderStatus;
-    private readonly _items: OrderItem[];
-    private readonly _total: number;
+    private _status: OrderStatus
+
+    private readonly _items: OrderItem[]
+
+    private readonly _total: number
 
     constructor(
 
@@ -27,17 +29,17 @@ export class Order {
 
         if (items.length === 0) {
 
-            throw new DomainError("ORDER_WITHOUT_ITEMS");
+            throw new DomainError("ORDER_WITHOUT_ITEMS")
         }
 
         if (total <= 0) {
 
-            throw new DomainError("INVALID_ORDER_TOTAL");
+            throw new DomainError("INVALID_ORDER_TOTAL")
         }
 
-        this._status = status;
-        this._items = items;
-        this._total = total;
+        this._status = status
+        this._items = items
+        this._total = total
     }
 
     // =====================
@@ -46,17 +48,17 @@ export class Order {
 
     get status() {
 
-        return this._status;
+        return this._status
     }
 
     get total() {
 
-        return this._total;
+        return this._total
     }
 
     get items() {
 
-        return [...this._items];
+        return [...this._items]
     }
 
     // =====================
@@ -71,10 +73,10 @@ export class Order {
 
                 "INVALID_STATUS_TRANSITION",
                 `Cannot pay order in status ${this._status}`
-            );
+            )
         }
 
-        this._status = "paid";
+        this._status = "paid"
     }
 
     ship() {
@@ -85,10 +87,10 @@ export class Order {
 
                 "INVALID_STATUS_TRANSITION",
                 `Cannot ship order in status ${this._status}`
-            );
+            )
         }
 
-        this._status = "shipped";
+        this._status = "shipped"
     }
 
     complete() {
@@ -99,10 +101,10 @@ export class Order {
 
                 "INVALID_STATUS_TRANSITION",
                 `Cannot complete order in status ${this._status}`
-            );
+            )
         }
 
-        this._status = "completed";
+        this._status = "completed"
     }
 
 
@@ -114,9 +116,9 @@ export class Order {
 
                 "ORDER_CANNOT_BE_CANCELLED",
                 "Order already shipped"
-            );
+            )
         }
 
-        this._status = "cancelled";
+        this._status = "cancelled"
     }
 }

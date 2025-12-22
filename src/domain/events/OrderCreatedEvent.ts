@@ -1,6 +1,6 @@
 export class OrderCreatedEvent {
 
-    readonly occurredAt: Date;
+    readonly occurredAt: Date
 
     constructor(
         public readonly orderId: string,
@@ -8,6 +8,6 @@ export class OrderCreatedEvent {
         public readonly total: number
     ) {
 
-        this.occurredAt = new Date();
+        this.occurredAt = new Date()
     }
 }

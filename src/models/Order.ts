@@ -1,4 +1,4 @@
-import { Schema, model, Document, Types } from "mongoose";
+import { Schema, model, Document, Types } from "mongoose"
 
 export interface IOrder extends Document {
 
@@ -29,6 +29,6 @@ const OrderSchema = new Schema<IOrder>({
         default: "pending",
     },
     createdAt: { type: Date, default: Date.now },
-});
+})
 
-export const Order = model<IOrder>("Order", OrderSchema);
+export const Order = model<IOrder>("Order", OrderSchema)

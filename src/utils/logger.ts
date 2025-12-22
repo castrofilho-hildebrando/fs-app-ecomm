@@ -3,7 +3,7 @@
 /**
  * Níveis de severidade de log.
  */
-type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG";
 
 /**
  * Função de log simples e formatada.
@@ -18,30 +18,30 @@ export const log = (
     details?: any
 ) => {
     // 1. Definição do carimbo de data/hora (Timestamp)
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toISOString()
 
     // 2. Formatação da mensagem principal
-    const logMessage = `[${timestamp}] [${level}] - ${message}`;
+    const logMessage = `[${timestamp}] [${level}] - ${message}`
 
     // 3. Escolha do console method baseado no nível
     const consoleMethod = 
-        level === 'ERROR' ? console.error :
-        level === 'WARN' ? console.warn :
-        console.log; // INFO ou DEBUG
+        level === "ERROR" ? console.error :
+            level === "WARN" ? console.warn :
+                console.log // INFO ou DEBUG
 
     // 4. Exibir o log
     if (details) {
         // Se houver detalhes, loga a mensagem e os detalhes no console
-        consoleMethod(logMessage, details);
+        consoleMethod(logMessage, details)
     } else {
         // Se não houver detalhes, loga apenas a mensagem
-        consoleMethod(logMessage);
+        consoleMethod(logMessage)
     }
 
     // Nota: Em um ambiente real, você faria aqui:
     // - Envio para um serviço de monitoramento (e.g., Sentry, DataDog).
     // - Escrita em um arquivo de log (File System).
-};
+}
 
 // Exemplo de uso
 // log('INFO', 'Servidor inicializado com sucesso.');

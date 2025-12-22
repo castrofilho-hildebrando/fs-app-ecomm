@@ -2,9 +2,9 @@ import {
     ListMyOrdersUseCase,
     ListMyOrdersInput,
     OrderSummary
-} from "./ListMyOrdersUseCase";
+} from "./ListMyOrdersUseCase"
 
-import { OrderRepository } from "../ports/OrderRepository";
+import { OrderRepository } from "../ports/OrderRepository"
 
 export class ListMyOrdersUseCaseImpl
 implements ListMyOrdersUseCase {
@@ -17,6 +17,6 @@ implements ListMyOrdersUseCase {
         { userId }: ListMyOrdersInput
     ): Promise<OrderSummary[]> {
 
-        return this.orderRepository.findByUserId(userId);
+        return this.orderRepository.findByUserId(userId)
     }
 }

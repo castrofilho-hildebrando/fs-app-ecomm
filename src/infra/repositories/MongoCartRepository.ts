@@ -1,26 +1,35 @@
-import { Cart } from "../../models/Cart";
-import { CartRepository } from "../../application/ports/CartRepository";
+import { Cart } from "../../models/Cart"
+import { CartRepository } from "../../application/ports/CartRepository"
 
 export class MongoCartRepository implements CartRepository {
 
     async findByUserId(userId: string) {
-        const cart = await Cart.findOne({ userId });
+        const cart = await Cart.findOne({ userId })
 
-        if (!cart) return null;
+        if (!cart) return null
 
         return {
-            id: cart._id.toString(),
-            items: cart.items.map(item => ({
-                productId: item.productId.toString(),
-                quantity: item.quantity,
-            })),
-        };
+
+            items: cart.items.map(i => ({
+                productId: i.productId.toString(),
+                quantity: i.quantity
+            }))
+        }
     }
 
-    async clear(cartId: string): Promise<void> {
+    async clearByUserId(userId: string): Promise<void> {
+
         await Cart.updateOne(
-            { _id: cartId },
+            { userId },
             { $set: { items: [] } }
         );
+    }
+
+    async save(userId: string, items: { productId: string; quantity: number }[]) {
+        await Cart.updateOne(
+            { userId },
+            { $set: { items } },
+            { upsert: true }
+        )
     }
 }

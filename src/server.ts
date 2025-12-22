@@ -1,19 +1,19 @@
-import mongoose from "mongoose";
-import { config } from "dotenv";
-import app from "./app";
+import mongoose from "mongoose"
+import { config } from "dotenv"
+import app from "./app"
 
-config();
+config()
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4000
 
 mongoose
     .connect(process.env.MONGO_URI as string)
     .then(() => {
-        console.log("Conectado ao MongoDB Atlas");
+        console.log("Conectado ao MongoDB Atlas")
         app.listen(PORT, () => {
-            console.log(`Servidor rodando na porta ${PORT}`);
-        });
+            console.log(`Servidor rodando na porta ${PORT}`)
+        })
     })
     .catch((err) => {
-        console.error("Erro ao conectar ao MongoDB:", err);
-    });
+        console.error("Erro ao conectar ao MongoDB:", err)
+    })

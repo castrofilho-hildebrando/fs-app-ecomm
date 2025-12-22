@@ -1,7 +1,7 @@
-import { Request, Response, NextFunction } from "express";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import { Request, Response, NextFunction } from "express"
+import jwt, { JwtPayload } from "jsonwebtoken"
 
-const JWT_SECRET = (process.env.JWT_SECRET || 'supersecret') as string;
+const JWT_SECRET = (process.env.JWT_SECRET || "supersecret") as string
 
 interface TokenPayload extends JwtPayload {
     userId: string;
@@ -14,32 +14,32 @@ export function authenticate(
     next: NextFunction
 ) {
 
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization
     if (!authHeader) {
-        return res.status(401).json({ message: "Token missing" });
+        return res.status(401).json({ message: "Token missing" })
     }
 
-    const parts = authHeader.split(" ");
+    const parts = authHeader.split(" ")
     if (parts.length !== 2) {
-        return res.status(401).json({ message: "Token malformed" });
+        return res.status(401).json({ message: "Token malformed" })
     }
 
-    const tokenCandidate = parts[1];
+    const tokenCandidate = parts[1]
     if (!tokenCandidate) {
-        return res.status(401).json({ message: "Token missing" });
+        return res.status(401).json({ message: "Token missing" })
     }
 
-    const token: string = tokenCandidate;
-    let decoded: JwtPayload;
+    const token: string = tokenCandidate
+    let decoded: JwtPayload
 
     try {
 
         decoded = jwt.verify(
             token,
             process.env.JWT_SECRET as string
-        ) as JwtPayload;
+        ) as JwtPayload
     } catch {
-        return res.status(401).json({ message: "Invalid token" });
+        return res.status(401).json({ message: "Invalid token" })
     }
 
     if (
@@ -47,14 +47,14 @@ export function authenticate(
         typeof decoded.id !== "string" ||
         (decoded.role !== "user" && decoded.role !== "admin")
     ) {
-        return res.status(401).json({ message: "Invalid token payload" });
+        return res.status(401).json({ message: "Invalid token payload" })
     }
 
     req.user = {
         id: decoded.id,
         role: decoded.role
-    };
+    }
 
-    next();
+    next()
 }
 
