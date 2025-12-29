@@ -1,216 +1,318 @@
+# Fullstack E-commerce Backend
 
-# Fullstack E-commerce Backend (Showcase)
+### Architectural Showcase (Node.js · TypeScript · MongoDB)
 
-Este projeto é um **backend de e-commerce em Node.js + TypeScript** desenvolvido como **showcase arquitetural**, com foco em:
+This project is a **Node.js + TypeScript e-commerce backend** built as an **architectural showcase**, with an explicit focus on:
 
-- clareza de domínio
-- decisões explícitas
-- regras de negócio protegidas
-- testes confiáveis
-- evolução incremental (sem overengineering)
+* domain clarity
+* conscious architectural decisions
+* protected business rules
+* realistic and reliable tests
+* incremental evolution without overengineering
 
-Ele **não tenta ser um “DDD acadêmico”** nem um CRUD simplista.  
-O objetivo é mostrar **como um sistema real pode evoluir de forma consciente**.
+It is **neither an academic DDD exercise** nor a simplistic CRUD.
+The goal is to demonstrate **how a real-world backend can evolve pragmatically**, balancing correctness, maintainability, and delivery.
 
----
-
-## Objetivos do projeto
-
-- Demonstrar **boas práticas de arquitetura backend**
-- Mostrar **como migrar de um CRUD procedural para um domínio rico**
-- Explicitar decisões que normalmente ficam implícitas
-- Ter testes que **realmente validam comportamento**, não apenas endpoints
-
-Este projeto é pensado para ser **lido**, não apenas executado.
+> This project is designed to be **read, analyzed, and discussed**, not just executed.
 
 ---
 
-## Visão geral da arquitetura
+## Project goals
 
-A arquitetura adotada é uma **variação pragmática de Clean Architecture + DDD**, adaptada para Node.js e MongoDB:
+* Demonstrate **backend architecture best practices in Node.js**
+* Show how to apply **DDD + Clean Architecture pragmatically**
+* Make **implicit architectural decisions explicit**
+* Expose **real trade-offs**, not idealized solutions
+* Provide tests that **validate behavior**, not only endpoints
 
-Controllers (HTTP / Express) → Application Services → Domain (Entities, Domain Services, Events) → Infrastructure (Mongoose, MongoDB, EventBus)
-
-
-### Princípios seguidos
-
-- O **domínio não depende de frameworks**
-- Controllers são **adaptadores**, não lugares de regra
-- Regras de negócio vivem no **domínio**
-- Testes refletem **uso real do sistema**
-- Complexidade só é introduzida quando há valor claro
+This repository exists as a **technical reference and discussion artifact**.
 
 ---
 
-## Domínio rico (por que e como)
-### Entidades de Domínio
+## Architectural overview
 
-Exemplo: `Order`
+The architecture follows a **pragmatic interpretation of Clean Architecture with DDD concepts**, adapted to the Node.js + MongoDB ecosystem:
 
-- Representa um conceito real do negócio
-- Possui **estado**
-- Possui **comportamento**
-- Protege suas próprias invariantes
+```
+HTTP / Express (Controllers)
+        ↓
+Application Layer (Use Cases)
+        ↓
+Domain (Entities, Domain Services, Events)
+        ↓
+Infrastructure (MongoDB, Mongoose, Event Bus, Outbox)
+```
 
-`pending → paid → shipped → completed`
+### Guiding principles
 
-Transições inválidas **não são permitidas**, nem por controllers, nem por services.
-Isso evita:
-- regras espalhadas
-- ifs duplicados
-- estados inválidos persistidos no banco
+* The **domain does not depend on frameworks**
+* Controllers act as **adapters**, not business logic holders
+* Use cases **orchestrate flows**, they do not encode deep rules
+* Business rules live in the **domain**
+* Complexity is introduced **only when it provides clear value**
 
-### Domain Services
-
-Usados apenas **quando uma regra não pertence claramente a uma única entidade.**
-Exemplo:
-- cálculo de total
-- validação cruzada entre itens e produtos
-
-> Se a regra pertence à entidade, ela está na entidade.
-Se não pertence, ela vira um Domain Service.
-
-### Eventos de Domínio
-O projeto usa **eventos de domínio simples**, como:
-`OrderCreatedEvent`
-Eles existem para:
-- desacoplar reações a eventos importantes
-- evitar efeitos colaterais escondidos
-- permitir evolução futura (ex.: envio de email, analytics)
-
-O `EventBus` é intencionalmente simples, pois:
-- não há necessidade real de mensageria externa neste estágio
-- complexidade só é adicionada quando necessária
-
-### Application Services vs Domain Services
-#### Application Services (ex.: CheckoutService)
-
-Responsáveis por:
-- orquestrar o fluxo
-- iniciar transações
-- chamar domínio
-- persistir resultados
-- publicar eventos
-
-Eles podem **conhecer infraestrutura**, porque:
-- fazem parte da camada de aplicação
-- não são reutilizados fora do sistema
-
-### Domain Services
-
-- Não conhecem Express
-- Não conhecem Mongo
-- Não conhecem Mongoose
-- Não conhecem HTTP
-
-Eles existem **apenas para expressar regras.**
-
-### Por que ainda existem services que importam Mongoose?
-
-Essa é uma **decisão consciente**, não um erro.
-#### Motivo principal: evolução incremental
-Este projeto não começou com:
-- repositories
-- interfaces de persistência
-- injeção de dependência completa
-
-Ele começou como um backend funcional e foi **refatorado gradualmente.**
-
-#### O que foi priorizado
-- mover regras para o domínio
-- proteger invariantes
-- melhorar testes
-- evitar big bang refactors
-
-#### O que foi propositalmente adiado
-- camada completa de repositories
-- abstração total de Mongoose
-
-#### Por quê?
-
-Porque:
-
-- **não havia necessidade real ainda**
-- o custo cognitivo seria maior que o benefício
-- a arquitetura já está preparada para isso
-
-#### Adicionar repositories agora seria trivial, mas não obrigatório.
-
-Este projeto mostra que:
-
-> **Clean Architecture não é binária (tem / não tem)**
-ela é um contínuo de decisões.
 ---
 
-### Estratégia de testes
-#### Tipos de testes presentes
+## Layers and responsibilities
 
-- Testes de integração (HTTP + Mongo)
-- Testes de fluxo real (checkout completo)
-- Testes de autorização
-- Testes de erro de domínio
+### Controllers (Express)
 
-#### O que NÃO foi feito (de propósito)
-- mocks excessivos
-- testes que dependem de estado global
-- testes que “forçam” regras inválidas
+Responsibilities:
 
-#### Banco de dados nos testes
-- MongoDB em memória
-- Replica Set habilitado
-- Transações reais funcionando
+* Adapt HTTP requests to use cases
+* Extract request data
+* Handle authentication and authorization
+* Translate domain errors into HTTP responses
 
-Isso garante que:
-- testes refletem produção
-- rollback funciona
-- efeitos colaterais são detectados
+Controllers **do not contain business rules**.
 
-### Segurança e decisões conscientes
+---
 
-- Erros evitam enumeração de usuários
-- Autorização é testada explicitamente
-- Usuário comum não pode:
--- atualizar status de pedido
--- pular etapas do fluxo
-- Admin não pode:
--- finalizar checkout de carrinho alheio
+### Application Layer (Use Cases)
 
-Essas regras são **do domínio**, não “convenções”.
+Examples:
 
-### O que este projeto NÃO tenta ser
-- Um framework genérico
-- Um boilerplate definitivo
-- Um DDD “puro” acadêmico
-- Um sistema completo de produção
+* `CheckoutUseCase`
+* `AddItemToCartUseCase`
+* `UpdateOrderStatusUseCase`
+* `ClearCartUseCase`
+* `ListMyOrdersUseCase`
 
-Ele é um **showcase técnico**, focado em:
-- decisões
-- trade-offs
-- clareza
-- evolução
+Responsibilities:
 
-### Possíveis evoluções (intencionais)
-Este projeto pode evoluir facilmente para:
-- repositories (interfaces + adapters)
-- testes unitários de entidades
-- mensageria real
-- pagamentos
-- reembolsos
-- webhooks
+* Orchestrate application flows
+* Coordinate multiple repositories
+* Manage transactions
+* Persist results
+* Publish application events
 
-Nada disso foi feito **ainda**, porque:
->Arquitetura boa sabe quando parar.
+Use cases:
 
-## Conclusão
+* Depend on **ports (interfaces)**
+* Do not know Express
+* Do not know MongoDB or Mongoose details
 
-Este código não é o resultado de seguir um tutorial.
-Ele é o resultado de **questionar decisões**, **corrigir rotas** e **respeitar o domínio**.
+---
 
-Se algo parece “incompleto”, provavelmente é **intencional**.
+### Domain Layer
 
-E se você chegou até aqui:
-sim, a arquitetura foi pensada.
+#### Domain entities
 
-## Licença
+Example: `Order`
 
-MIT — use, critique, evolua.
+* Represents a real business concept
+* Has state and behavior
+* Protects its own invariants
+* Controls valid state transitions
+
+Allowed lifecycle:
+
+```
+pending → paid → shipped → completed
+```
+
+Invalid transitions are **not allowed**, regardless of the caller:
+
+* controller
+* use case
+* service
+
+This prevents:
+
+* duplicated rules
+* scattered conditionals
+* invalid states being persisted
+
+---
+
+#### Domain services
+
+Used **only when a rule does not clearly belong to a single entity**.
+
+Examples:
+
+* cross-entity validation
+* rules involving multiple aggregates
+* calculations without a clear owner
+
+Simple rule:
+
+> If the rule belongs to the entity, it stays in the entity.
+> If it doesn’t, it becomes a Domain Service.
+
+Domain services:
+
+* Do not know HTTP
+* Do not know MongoDB
+* Do not know Mongoose
+
+---
+
+#### Domain errors
+
+The domain defines explicit business errors such as:
+
+* `OrderNotFoundError`
+* `OrderCannotBeCancelledError`
+* `OnlyAdminCanChangeOrderStatusError`
+* `CartNotFoundError`
+
+These errors:
+
+* Represent **business failures**
+* Are handled at the controller level
+* Make behavior explicit and testable
+
+---
+
+## Events
+
+The project deliberately uses **two levels of events**.
+
+### Domain events
+
+Example:
+
+* `OrderCreatedEvent`
+
+Used to:
+
+* express important domain facts
+* decouple reactions
+* avoid hidden side effects
+
+The internal `EventBus` is intentionally simple:
+
+* no external messaging is required at this stage
+* complexity is introduced only when necessary
+
+---
+
+### Outbox Pattern (application-level events)
+
+The checkout flow persists events using an **Outbox Pattern**:
+
+* Events are stored within the same transaction
+* An asynchronous dispatcher processes them
+* Handlers execute real side effects
+
+This guarantees:
+
+* eventual consistency
+* failure tolerance
+* no “ghost” side effects
+
+This is a pattern commonly used in **production-grade distributed systems**.
+
+---
+
+## Infrastructure layer
+
+Includes:
+
+* Mongo repositories (`MongoOrderRepository`, etc.)
+* Transaction manager
+* Outbox implementation
+* Mongoose models
+* Event dispatchers
+
+The infrastructure layer:
+
+* Implements application ports
+* Can be replaced without affecting the domain
+
+---
+
+## Testing strategy
+
+### Types of tests included
+
+* HTTP integration tests (Express)
+* End-to-end flow tests (full checkout)
+* Authorization tests
+* Domain error tests
+
+### Intentional decisions
+
+* In-memory MongoDB
+* Replica Set enabled
+* Real transactions executed
+
+This ensures:
+
+* tests closely reflect production behavior
+* rollback is validated
+* side effects are detectable
+
+### What was intentionally avoided
+
+* excessive mocking
+* fragile implementation-based tests
+* artificial isolation with low value
+
+---
+
+## Security and explicit decisions
+
+* Errors avoid user enumeration
+* Authorization rules are explicitly tested
+* Regular users cannot:
+
+  * change order status
+  * skip workflow steps
+* Admins cannot:
+
+  * checkout carts that are not theirs
+
+These are **domain rules**, not controller conventions.
+
+---
+
+## What this project is NOT
+
+* A generic framework
+* A definitive boilerplate
+* A “pure” academic DDD implementation
+* A complete production system
+
+It is a **technical showcase**, focused on:
+
+* clarity
+* trade-offs
+* conscious decisions
+* sustainable evolution
+
+---
+
+## Intended evolution paths
+
+This project can naturally evolve into:
+
+* explicit value objects (`Money`, `OrderStatus`, etc.)
+* a richer domain model
+* external messaging
+* payments and refunds
+* webhooks
+* stronger idempotency guarantees
+
+None of this was implemented **yet**, because:
+
+> Good architecture knows when to stop.
+
+---
+
+## Conclusion
+
+This codebase is not the result of following a tutorial.
+It is the result of **questioning decisions**, **correcting course**, and **respecting the domain**.
+
+If something looks “incomplete”, it is probably **intentional**.
+
+If you made it this far:
+yes, the architecture was carefully designed.
+
+---
+
+## License
+
+MIT — use it, critique it, evolve it.
