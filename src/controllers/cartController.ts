@@ -1,128 +1,93 @@
-import { Request, Response } from "express";
+import { Request, Response } from "express"
+import { makeGetCartUseCase } from "../infra/factories/getCartFactory"
+import { makeAddItemToCartUseCase } from "../infra/factories/addItemToCartFactory"
+import { makeRemoveItemFromCartUseCase } from "../infra/factories/removeItemFromCartFactory"
+import { makeClearCartUseCase } from "../infra/factories/clearCartFactory"
 
-import { makeGetCartUseCase } from "../infra/factories/getCartFactory";
-import { makeAddItemToCartUseCase } from "../infra/factories/addItemToCartFactory";
-import { makeRemoveItemFromCartUseCase } from "../infra/factories/removeItemFromCartFactory";
-import { makeClearCartUseCase } from "../infra/factories/clearCartFactory";
-
-/**
- * GET /cart
- */
-export async function getCart(req: Request, res: Response) {
-
+export const getCart = async (req: Request, res: Response) => {
     try {
+        const userId = req.user?.userId
+        if (!userId) return res.status(401).json({ error: "Não autorizado" })
 
-        const user = req.user;
-        if (!user) {
-
-            return res.status(401).json({ message: "Unauthorized" });
-        }
-
-        const useCase = makeGetCartUseCase();
-        const cart = await useCase.execute({
-
-            userId: user.id
-        });
-
-        return res.status(200).json(cart);
-    } catch (error) {
-
-        return res.status(500).json({
-
-            message: (error as Error).message
-        });
+        const useCase = makeGetCartUseCase()
+        const cart = await useCase.execute({ userId }) // objeto!
+        // testes esperam items na raiz
+        return res.status(200).json({ items: cart.items })
+    } catch (error: any) {
+        return res.status(500).json({ error: error.message })
     }
 }
 
-/**
- * POST /cart/add
- */
-export async function addToCart(req: Request, res: Response) {
-
+export const addItemToCart = async (req: Request, res: Response) => {
     try {
+        const userId = req.user?.userId
+        const { productId, quantity } = req.body
 
-        const user = req.user;
-        if (!user) {
-
-            return res.status(401).json({ message: "Unauthorized" });
+        if (!userId) return res.status(401).json({ error: "Não autorizado" })
+        if (!productId || !quantity) {
+            return res.status(400).json({ error: "Produto e quantidade são obrigatórios" })
         }
 
-        const { productId, quantity } = req.body;
+        const useCase = makeAddItemToCartUseCase()
+        await useCase.execute({ userId, productId, quantity }) // objeto!
 
-        if (!productId || typeof quantity !== "number") {
+        const getUseCase = makeGetCartUseCase()
+        const updatedCart = await getUseCase.execute({ userId })
 
-            return res.status(400).json({
+        return res.status(200).json({ cart: updatedCart })
+    }
 
-                message: "productId and quantity are required"
-            });
-        }
+    catch (error: any) {
 
-        const useCase = makeAddItemToCartUseCase();
-        await useCase.execute({
-
-            userId: user.id,
-            productId,
-            quantity
-        });
-
-        return res.status(204).send();
-    } catch (error) {
-
-        return res.status(400).json({
-
-            message: (error as Error).message
-        });
+        const code = error?.code
+        const status = code === "PRODUCT_NOT_FOUND" ? 404 : 400
+        return res.status(status).json({ error: error.message })
     }
 }
 
-/**
- * POST /cart/remove
- */
-export async function removeFromCart(req: Request, res: Response) {
+export const removeItemFromCart = async (req: Request, res: Response) => {
 
     try {
+        const userId = req.user?.userId
+        const { productId } = req.body // ler do body
 
-        const user = req.user;
-        if (!user) {
+        if (!userId) return res.status(401).json({ error: "Não autorizado" })
 
-            return res.status(401).json({ message: "Unauthorized" });
+        // checar existência do carrinho antes
+        const getUseCase = makeGetCartUseCase()
+        const existing = await getUseCase.execute({ userId })
+        if (!existing || existing.items.length === 0) {
+            return res.status(404).json({ error: "Carrinho não existe" })
         }
 
-        const { productId } = req.body;
+        const useCase = makeRemoveItemFromCartUseCase()
+        await useCase.execute({ userId, productId })
 
-        if (!productId) {
+        const updatedCart = await getUseCase.execute({ userId })
 
-            return res.status(400).json({
-
-                message: "productId is required"
-            });
-        }
-
-        const useCase = makeRemoveItemFromCartUseCase();
-        await useCase.execute({
-
-            userId: user.id,
-            productId
-        });
-
-        return res.status(204).send();
-    } catch (error) {
-
-        return res.status(400).json({
-
-            message: (error as Error).message
-        });
+        return res.status(200).json({ cart: updatedCart })
+    } catch (error: any) {
+        return res.status(500).json({ error: error.message })
     }
 }
 
-// POST /cart/clear
-export async function clearCart(req: Request, res: Response) {
 
-    if (!req.user) return res.sendStatus(401);
+export const clearCart = async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?.userId
+        if (!userId) return res.status(401).json({ error: "Não autorizado" })
 
-    const useCase = makeClearCartUseCase();
-    await useCase.execute({ userId: req.user.id });
+        const getUseCase = makeGetCartUseCase()
+        const existing = await getUseCase.execute({ userId })
+        if (!existing || existing.items.length === 0) {
+            return res.status(404).json({ error: "Carrinho não existe" })
+        }
 
-    return res.sendStatus(204);
+        const useCase = makeClearCartUseCase()
+        await useCase.execute({ userId })
+
+        return res.status(200).json({ message: "Carrinho limpo com sucesso", cart: { items: [] } })
+    } catch (error: any) {
+        return res.status(500).json({ error: error.message })
+    }
 }
-

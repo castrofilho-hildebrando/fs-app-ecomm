@@ -1,5 +1,9 @@
 import mongoose from "mongoose"
 import { MongoMemoryReplSet } from "mongodb-memory-server"
+import * as dotenv from "dotenv"
+
+dotenv.config()
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-jwt-secret"
 
 let replset: MongoMemoryReplSet
 

@@ -1,7 +1,11 @@
-export class DomainError extends Error {
+export abstract class DomainError extends Error {
 
-    constructor(public readonly code: string, message?: string  ) {
-        
-        super(message || code)
+    public readonly code: string
+
+    constructor(code: string, message: string) {
+
+        super(message)
+        this.code = code
+        this.name = this.constructor.name
     }
 }

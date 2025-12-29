@@ -1,8 +1,8 @@
 import { Request, Response } from "express"
-import { User } from "../models/User"
-import { Product } from "../models/Product"
-import { Order } from "../models/Order"
-import { Cart } from "../models/Cart"
+import { User } from "../infra/models/User"
+import { Product } from "../infra/models/Product"
+import { Order } from "../infra/models/Order"
+import { Cart } from "../infra/models/Cart"
 
 export const getStats = async (req: Request, res: Response) => {
 
@@ -93,7 +93,9 @@ export const getStats = async (req: Request, res: Response) => {
             },
             carts: { avgItems, conversionRate },
         })
-    } catch (error) {
+    }
+
+    catch {
 
         res.status(500).json({
             error: "Erro ao gerar estatísticas consolidadas",

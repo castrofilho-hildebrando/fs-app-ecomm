@@ -3,7 +3,7 @@
 import { Request, Response } from "express"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
-import { User } from "../models/User"
+import { User } from "../infra/models/User"
 
 // Importante: O '!' garante ao TypeScript que esta variável é uma string definida,
 // já que carregamos o .env no server.ts.

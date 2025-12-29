@@ -1,6 +1,6 @@
-import { Outbox } from "../models/Outbox";
-import { OutboxRepository } from "../../application/ports/OutboxRepository";
-import { ApplicationEvent } from "../../application/events/ApplicationEvent";
+import { Outbox } from "../models/Outbox"
+import { OutboxRepository } from "../../application/ports/OutboxRepository"
+import { ApplicationEvent } from "../../application/events/ApplicationEvent"
 
 export class MongoOutboxRepository implements OutboxRepository {
 
@@ -11,6 +11,6 @@ export class MongoOutboxRepository implements OutboxRepository {
             payload: event.payload,
             occurredAt: event.occurredAt,
             processed: false
-        });
+        })
     }
 }

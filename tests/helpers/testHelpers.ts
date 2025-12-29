@@ -1,6 +1,6 @@
-import { User } from "../../src/models/User"
-import { Product } from "../../src/models/Product"
-import bcrypt from "bcrypt"
+import { User } from "../../src/infra/models/User"
+import { Product } from "../../src/infra/models/Product"
+import * as bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret"
@@ -24,8 +24,11 @@ export const createTestUser = async (role: "user" | "admin" = "user", suffix: st
     })
 
     const token = jwt.sign(
-        { userId: user._id.toString(), role: user.role },
-        JWT_SECRET,
+        {
+            userId: user._id.toString(),
+            role: user.role,
+        },
+        process.env.JWT_SECRET || "supersecret",
         { expiresIn: "1h" }
     )
 

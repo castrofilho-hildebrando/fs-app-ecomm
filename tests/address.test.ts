@@ -3,7 +3,7 @@ import mongoose from "mongoose"
 import app from "../src/app"
 import { createTestUser } from "./helpers/testHelpers"
 import { clearDatabase } from "./helpers/clearDatabase"
-import { Address, IAddress } from "../src/models/Address" // Certifique-se de importar IAddress se estiver usando TypeScript
+import { Address, IAddress } from "../src/infra/models/Address" // Certifique-se de importar IAddress se estiver usando TypeScript
 import "./setup" 
 
 describe("Address Routes", () => {

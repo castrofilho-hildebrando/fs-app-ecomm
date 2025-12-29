@@ -6,7 +6,7 @@ import {
 
 import { OrderRepository } from "../ports/OrderRepository"
 import { OrderStatusDomainService } from "../../domain/services/OrderStatusDomainService"
-import { DomainError } from "../../domain/errors/DomainError"
+import { OrderNotFoundError } from "../../domain/errors/OrderNotFoundError"
 
 export class UpdateOrderStatusUseCaseImpl
 implements UpdateOrderStatusUseCase {
@@ -24,7 +24,7 @@ implements UpdateOrderStatusUseCase {
         const order = await this.orderRepository.findById(input.orderId)
 
         if (!order) {
-            throw new DomainError("Order not found")
+            throw new OrderNotFoundError("Order not found")
         }
 
         this.statusService.validatePermission(

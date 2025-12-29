@@ -1,11 +1,5 @@
-export type GetAllOrdersInput = {
-    actor: {
-        id: string;
-        role: "admin" | "user";
-    };
-};
-
 export type OrderSummary = {
+
     id: string;
     userId: string;
     status: string;
@@ -13,6 +7,15 @@ export type OrderSummary = {
     createdAt: Date;
 };
 
+export type GetAllOrdersInput = {
+
+    actor: {
+        id: string;
+        role: "admin" | "user";
+    };
+};
+
 export interface GetAllOrdersUseCase {
+
     execute(input: GetAllOrdersInput): Promise<OrderSummary[]>;
 }

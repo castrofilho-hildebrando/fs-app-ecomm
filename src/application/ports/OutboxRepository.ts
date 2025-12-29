@@ -1,4 +1,4 @@
-import { ApplicationEvent } from "../events/ApplicationEvent";
+import { ApplicationEvent } from "../events/ApplicationEvent"
 
 export interface OutboxRepository {
 

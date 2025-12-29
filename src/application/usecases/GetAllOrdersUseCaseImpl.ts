@@ -5,12 +5,13 @@ import {
 } from "./GetAllOrdersUseCase"
 
 import { OrderRepository } from "../ports/OrderRepository"
-import { DomainError } from "../../domain/errors/DomainError"
+import { AccessDeniedError } from "../../domain/errors/AccessDeniedError"
 
 export class GetAllOrdersUseCaseImpl
 implements GetAllOrdersUseCase {
 
     constructor(
+
         private readonly orderRepository: OrderRepository
     ) {}
 
@@ -19,7 +20,7 @@ implements GetAllOrdersUseCase {
     ): Promise<OrderSummary[]> {
 
         if (actor.role !== "admin") {
-            throw new DomainError("Access denied")
+            throw new AccessDeniedError("ACCESS_DENIED", "Access denied")
         }
 
         return this.orderRepository.findAll()

@@ -1,0 +1,54 @@
+
+> backend@1.0.0 format
+> eslint . --fix --ext .ts,.js
+
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/src/controllers/orderController.ts
+  55:14  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  67:14  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/src/controllers/userController.ts
+   8:14  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  20:14  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  39:14  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  51:14  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/src/domain/services/OrderStatusDomainService.ts
+  26:9  error  'currentStatus' is defined but never used  @typescript-eslint/no-unused-vars
+  27:9  error  'newStatus' is defined but never used      @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/src/infra/factories/addItemToCartFactory.ts
+  1:10  error  'AddItemToCartUseCase' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/src/infra/outbox/MongoOutboxDispatcher.ts
+  2:10  error  'OutboxDispatcher' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/src/middlewares/authMiddleware.ts
+  24:12  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/tests/address.test.ts
+  2:8  error  'mongoose' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/tests/cart.test.ts
+  11:9  error  'userId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/tests/helpers/testHelpers.ts
+   6:7    error  'JWT_SECRET' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   8:128  error  'IUser' is not defined                           no-undef
+  11:11   error  'baseEmail' is assigned a value but never used   @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/tests/order.test.js
+   53:9   error  'adminId' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   54:9   error  'productId' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  368:38  error  'adminToken' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/tests/order.test.ts
+   17:9   error  'adminId' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   18:9   error  'productId' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  264:28  error  'adminToken' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/home/unitytech/UnityTech/Apps/fs-app-ecomm/backend/tests/products.test.ts
+  12:9  error  'productId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 23 problems (23 errors, 0 warnings)
+

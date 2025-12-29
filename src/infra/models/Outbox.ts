@@ -1,4 +1,4 @@
-import { Schema, model } from "mongoose";
+import { Schema, model } from "mongoose"
 
 const OutboxSchema = new Schema(
     {
@@ -31,6 +31,6 @@ const OutboxSchema = new Schema(
     {
         timestamps: true,
     }
-);
+)
 
-export const Outbox = model("Outbox", OutboxSchema);
+export const Outbox = model("Outbox", OutboxSchema)

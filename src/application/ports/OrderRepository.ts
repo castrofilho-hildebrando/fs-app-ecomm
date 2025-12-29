@@ -1,31 +1,50 @@
 export interface OrderRepository {
+
     findById(id: string): Promise<{
         id: string;
-        status: string;
         userId: string;
+        items: any[];
+        total: number;
+        status: string;
     } | null>;
 
     findByUserId(userId: string): Promise<{
         id: string;
-        status: string;
+        userId: string;
+        items: any[];
         total: number;
-        createdAt: Date;
+        status: string;
     }[]>;
 
     findAll(): Promise<{
         id: string;
         userId: string;
-        status: string;
+        items: any[];
         total: number;
+        status: string;
         createdAt: Date;
     }[]>;
 
     create(data: {
         userId: string;
-        items: { productId: string; quantity: number }[];
+        items: any[];
         total: number;
         status: string;
-    }): Promise<{ id: string }>;
+    }): Promise<{
+        id: string;
+        userId: string;
+        items: any[];
+        total: number;
+        status: string;
+    }>;
 
-    updateStatus(orderId: string, status: string): Promise<void>;
+    updateStatus(id: string, status: string): Promise<{
+        id: string;
+        userId: string;
+        items: any[];
+        total: number;
+        status: string;
+    } | null>;
+
+    create(order: any): Promise<any>; // Adiciona esta linha
 }

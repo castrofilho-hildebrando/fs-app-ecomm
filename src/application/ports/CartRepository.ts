@@ -1,26 +1,24 @@
-export type CartItemData = {
-    productId: string;
-    quantity: number;
-};
-
-export type CartData = {
-    id: string;
-    items: CartItemData[];
-};
-
 export interface CartRepository {
 
-    findByUserId(userId: string): Promise<{
+  findByUserId(
+    userId: string
+  ): Promise<{
+    userId: string;
+    items: { productId: string; quantity: number }[];
+  } | null>;
 
-        items: { productId: string; quantity: number }[];
-    } | null>;
+  addItem(
+    userId: string,
+    productId: string,
+    quantity: number
+  ): Promise<void>;
 
-    save(
+  removeItem(
+    userId: string,
+    productId: string
+  ): Promise<void>;
 
-        userId: string,
-        items: { productId: string; quantity: number }[]
-    ): Promise<void>;
-
-    clearByUserId(userId: string): Promise<void>;
+  clear(
+    userId: string
+  ): Promise<void>;
 }
-

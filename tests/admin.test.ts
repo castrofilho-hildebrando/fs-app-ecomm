@@ -3,8 +3,8 @@ import mongoose from "mongoose"
 import app from "../src/app"
 import { createTestUser, createTestProduct } from "./helpers/testHelpers"
 import { clearDatabase } from "./helpers/clearDatabase"
-import { Order } from "../src/models/Order"
-import { Cart } from "../src/models/Cart"
+import { Order } from "../src/infra/models/Order"
+import { Cart } from "../src/infra/models/Cart"
 import "./setup"
 
 describe("Admin Routes", () => {

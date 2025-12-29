@@ -1,5 +1,5 @@
 import { Request, Response } from "express"
-import { Address } from "../models/Address"
+import { Address } from "../infra/models/Address"
 import mongoose from "mongoose"
 
 // Função auxiliar para garantir que apenas um endereço seja o padrão
@@ -22,13 +22,11 @@ export const createAddress = async (req: Request, res: Response) => {
 
     try {
 
-        const userId = req.user?.id
+        const userId = req.user?.userId
         if (!userId) {
 
             return res.status(401).json({ error: "Usuário não autenticado." })
         }
-
-        ;
 
         const { street, city, state, zipCode, country, isDefault } = req.body
 
@@ -56,7 +54,9 @@ export const createAddress = async (req: Request, res: Response) => {
         await newAddress.save()
         
         res.status(201).json({ message: "Endereço criado com sucesso", address: newAddress })
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error("Erro ao criar endereço:", error)
         res.status(500).json({ error: "Erro interno ao criar endereço." })
@@ -70,7 +70,7 @@ export const getAddresses = async (req: Request, res: Response) => {
 
     try {
 
-        const userId = req.user?.id
+        const userId = req.user?.userId
         if (!userId) {
 
             return res.status(401).json({ error: "Usuário não autenticado." })
@@ -79,7 +79,9 @@ export const getAddresses = async (req: Request, res: Response) => {
         const addresses = await Address.find({ userId }).sort({ isDefault: -1, createdAt: 1 })
         
         res.json(addresses)
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error("Erro ao buscar endereços:", error)
         res.status(500).json({ error: "Erro interno ao buscar endereços." })
@@ -93,7 +95,7 @@ export const updateAddress = async (req: Request, res: Response) => {
 
     try {
 
-        const userId = req.user?.id
+        const userId = req.user?.userId
         if (!userId) return res.status(401).json({ error: "Usuário não autenticado." })
 
         const { id } = req.params
@@ -117,7 +119,9 @@ export const updateAddress = async (req: Request, res: Response) => {
         const updatedAddress = await Address.findByIdAndUpdate(id, updateData, { new: true })
         
         res.json({ message: "Endereço atualizado com sucesso", address: updatedAddress })
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error("Erro ao atualizar endereço:", error)
         res.status(500).json({ error: "Erro interno ao atualizar endereço." })
@@ -131,7 +135,7 @@ export const deleteAddress = async (req: Request, res: Response) => {
 
     try {
 
-        const userId = req.user?.id
+        const userId = req.user?.userId
         if (!userId) {
 
             return res.status(401).json({ error: "Usuário não autenticado." })
@@ -151,7 +155,9 @@ export const deleteAddress = async (req: Request, res: Response) => {
         }
         
         res.json({ message: "Endereço removido com sucesso" })
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error("Erro ao deletar endereço:", error)
         res.status(500).json({ error: "Erro interno ao deletar endereço." })

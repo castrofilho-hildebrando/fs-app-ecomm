@@ -1,23 +1,24 @@
-import { RemoveItemFromCartUseCase, RemoveItemFromCartInput } from "./RemoveItemFromCartUseCase"
-import { CartRepository } from "../ports/CartRepository"
+import {
+    RemoveItemFromCartUseCase,
+    RemoveItemFromCartInput,
+} from "./RemoveItemFromCartUseCase"
 
-export class RemoveItemFromCartUseCaseImpl implements RemoveItemFromCartUseCase {
+import { CartRepository } from "../ports/CartRepository"
+import { CartNotFoundError } from "../../domain/errors/CartNotFoundError"
+
+export class RemoveItemFromCartUseCaseImpl
+implements RemoveItemFromCartUseCase {
 
     constructor(
         private readonly cartRepository: CartRepository
     ) {}
 
-    async execute({ userId, productId }: RemoveItemFromCartInput): Promise<void> {
+    async execute( { userId, productId }: RemoveItemFromCartInput ): Promise<void> {
+
         const cart = await this.cartRepository.findByUserId(userId)
-
         if (!cart) {
-            return
+            throw new CartNotFoundError(`Cart for user ${userId} not found`)
         }
-
-        const filteredItems = cart.items.filter(
-            item => item.productId !== productId
-        )
-
-        await this.cartRepository.save(userId, filteredItems)
+        await this.cartRepository.removeItem(userId, productId)
     }
 }

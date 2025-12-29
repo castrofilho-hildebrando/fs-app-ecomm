@@ -1,5 +1,3 @@
-// FILE: src/routes/addressRoutes.ts
-
 import { Router } from "express"
 import { authenticate } from "../middlewares/authMiddleware" 
 import { 

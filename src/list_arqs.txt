@@ -1,0 +1,2511 @@
+import { Product } from "../models/Product"
+import { ProductRepository } from "../../application/ports/ProductRepository"
+
+export class MongoProductRepository implements ProductRepository {
+
+    async findById(id: string) {
+
+        const product = await Product.findById(id);
+
+        if (!product) return null;
+
+        return {
+
+            id: product._id.toString(),
+            stock: product.stock
+        };
+    }
+
+    async findByIds(ids: string[]) {
+
+        const products = await Product.find({
+
+            _id: { $in: ids },
+        })
+
+        return products.map(p => ({
+
+            id: p._id.toString(),
+            price: p.price,
+            stock: p.stock
+        }))
+    }
+
+    async decrementStock(
+        productId: string,
+        quantity: number
+    ): Promise<void> {
+
+        await Product.updateOne(
+
+            { _id: productId },
+            { $inc: { stock: -quantity } }
+        )
+    }
+}
+import { CartRepository } from "../../application/ports/CartRepository";
+import { Cart } from "../models/Cart";
+
+export class MongoCartRepository implements CartRepository {
+
+    async findByUserId(userId: string) {
+        const cart = await Cart.findOne({ userId }).lean();
+
+        if (!cart) {
+            return null;
+        }
+
+        return {
+            userId: cart.userId.toString(),
+            items: cart.items.map(item => ({
+                productId: item.productId.toString(),
+                quantity: item.quantity,
+            })),
+        };
+    }
+
+    async addItem(userId: string, productId: string, quantity: number) {
+        await Cart.updateOne(
+            { userId, "items.productId": productId },
+            { $inc: { "items.$.quantity": quantity } }
+        );
+
+        await Cart.updateOne(
+            { userId, "items.productId": { $ne: productId } },
+            { $push: { items: { productId, quantity } } },
+            { upsert: true }
+        );
+    }
+
+    async removeItem(userId: string, productId: string) {
+        await Cart.updateOne(
+            { userId },
+            { $pull: { items: { productId } } }
+        );
+    }
+
+    async clear(userId: string) {
+        await Cart.updateOne(
+            { userId },
+            { $set: { items: [] } }
+        );
+    }
+}
+import { Outbox } from "../models/Outbox";
+import { OutboxRepository } from "../../application/ports/OutboxRepository";
+import { ApplicationEvent } from "../../application/events/ApplicationEvent";
+
+export class MongoOutboxRepository implements OutboxRepository {
+
+    async save(event: ApplicationEvent): Promise<void> {
+
+        await Outbox.create({
+            name: event.name,
+            payload: event.payload,
+            occurredAt: event.occurredAt,
+            processed: false
+        });
+    }
+}
+import { Order } from "../models/Order"
+import { OrderRepository } from "../../application/ports/OrderRepository"
+
+export class MongoOrderRepository implements OrderRepository {
+
+    async create(data: {
+        userId: string;
+        items: { productId: string; quantity: number }[];
+        total: number;
+        status: string;
+    }): Promise<{ id: string }> {
+
+        const order = new Order({
+            userId: data.userId,
+            items: data.items,
+            total: data.total,
+            status: data.status,
+        })
+
+        await order.save()
+
+        return { id: order._id.toString() }
+    }
+
+    async findById(id: string) {
+        const order = await Order.findById(id)
+        if (!order) return null
+
+        return {
+            id: order._id.toString(),
+            status: order.status,
+            userId: order.userId.toString()
+        }
+    }
+
+    async findByUserId(userId: string) {
+        const orders = await Order.find({ userId }).sort({ createdAt: -1 })
+
+        return orders.map(order => ({
+            id: order._id.toString(),
+            status: order.status,
+            total: order.total,
+            createdAt: order.createdAt
+        }))
+    }
+
+    async findAll() {
+        const orders = await Order.find().sort({ createdAt: -1 })
+
+        return orders.map(order => ({
+            id: order._id.toString(),
+            userId: order.userId.toString(),
+            status: order.status,
+            total: order.total,
+            createdAt: order.createdAt
+        }))
+    }
+
+    async updateStatus(orderId: string, status: string) {
+        await Order.updateOne(
+            { _id: orderId },
+            { $set: { status } }
+        )
+    }
+}
+import { EventBus } from "../domain/events/EventBus"
+import { OrderCreatedEvent } from "../domain/events/OrderCreatedEvent"
+import { SendOrderEmailHandler } from "../application/handlers/SendOrderEmailHandler"
+import { UpdateSalesMetricsHandler } from "../application/handlers/UpdateSalesMetricsHandler"
+
+export const eventBus = new EventBus()
+
+// wiring
+eventBus.subscribe(
+
+    OrderCreatedEvent,
+    new SendOrderEmailHandler()
+)
+
+eventBus.subscribe(
+
+    OrderCreatedEvent,
+    new UpdateSalesMetricsHandler()
+)
+import { Schema, model } from "mongoose";
+
+const OutboxSchema = new Schema(
+    {
+        name: {
+            type: String,
+            required: true,
+        },
+
+        payload: {
+            type: Schema.Types.Mixed,
+            required: true,
+        },
+
+        occurredAt: {
+            type: Date,
+            required: true,
+        },
+
+        processed: {
+            type: Boolean,
+            required: true,
+            default: false,
+        },
+
+        processedAt: {
+            type: Date,
+            required: false,
+        },
+    },
+    {
+        timestamps: true,
+    }
+);
+
+export const Outbox = model("Outbox", OutboxSchema);
+import mongoose, { Document, Schema } from "mongoose"
+
+// 1. Definição da Interface
+export interface IAddress extends Document {
+    userId: mongoose.Types.ObjectId;
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+    isDefault: boolean;
+}
+
+// 2. Definição do Schema
+const AddressSchema: Schema = new Schema({
+    // Referência ao usuário
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    
+    street: { type: String, required: true },
+    city: { type: String, required: true },
+    state: { type: String, required: true },
+    zipCode: { type: String, required: true },
+    country: { type: String, default: "Brazil" },
+    
+    // Se este é o endereço padrão do usuário
+    isDefault: { type: Boolean, default: false },
+}, {
+    timestamps: true 
+})
+
+// 3. Exportação do Modelo
+export const Address = mongoose.model<IAddress>("Address", AddressSchema)import { Schema, model, Document } from "mongoose"
+
+export interface IProduct extends Document {
+    name: string;
+    description: string;
+    price: number;
+    stock: number;
+    createdAt: Date;
+}
+
+const ProductSchema = new Schema<IProduct>({
+    name: { type: String, required: true },
+    description: { type: String },
+    price: { type: Number, required: true },
+    stock: { type: Number, default: 0 },
+    createdAt: { type: Date, default: Date.now },
+})
+
+export const Product = model<IProduct>("Product", ProductSchema)
+import { Schema, model, Document, Types } from "mongoose"
+
+export interface ICart extends Document {
+    userId: Types.ObjectId;
+    items: { productId: Types.ObjectId; quantity: number }[];
+    createdAt: Date;
+}
+
+const CartSchema = new Schema<ICart>({
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    items: [
+        {
+            productId: {
+                type: Schema.Types.ObjectId,
+                ref: "Product",
+                required: true,
+            },
+            quantity: { type: Number, required: true },
+        },
+    ],
+    // Adicionado no Schema para criar a data automaticamente
+    createdAt: { type: Date, default: Date.now },
+})
+
+export const Cart = model<ICart>("Cart", CartSchema)
+import { Schema, model, Document, Types } from "mongoose"
+
+export interface IOrder extends Document {
+
+    userId: Types.ObjectId;
+    items: { productId: Types.ObjectId; quantity: number }[];
+    total: number;
+    status: "pending" | "paid" | "shipped" | "completed" | "cancelled";
+    createdAt: Date;
+}
+
+const OrderSchema = new Schema<IOrder>({
+
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    items: [
+        {
+            productId: {
+                type: Types.ObjectId,
+                ref: "Product",
+                required: true,
+            },
+            quantity: { type: Number, required: true },
+        },
+    ],
+    total: { type: Number, required: true },
+    status: {
+        type: String,
+        enum: ["pending", "paid", "shipped", "completed", "cancelled"],
+        default: "pending",
+    },
+    createdAt: { type: Date, default: Date.now },
+})
+
+export const Order = model<IOrder>("Order", OrderSchema)
+import { Schema, model, Document } from "mongoose"
+
+export interface IUser extends Document {
+    name: string;
+    email: string;
+    passwordHash: string;
+    role: "user" | "admin";
+    createdAt: Date;
+}
+
+const UserSchema = new Schema<IUser>({
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    passwordHash: { type: String, select: false, required: true },
+    role: { type: String, enum: ["user", "admin"], default: "user" },
+    createdAt: { type: Date, default: Date.now },
+})
+
+export const User = model<IUser>("User", UserSchema)
+import { GetCartUseCase } from "../../application/usecases/GetCartUseCase"
+import { GetCartUseCaseImpl } from "../../application/usecases/GetCartUseCaseImpl"
+
+import { MongoCartRepository } from "../repositories/MongoCartRepository"
+
+export function makeGetCartUseCase(): GetCartUseCase {
+
+    return new GetCartUseCaseImpl(
+
+        new MongoCartRepository()
+    )
+}import { UpdateOrderStatusUseCase } from "../../application/usecases/UpdateOrderStatusUseCase"
+import { UpdateOrderStatusUseCaseImpl } from "../../application/usecases/UpdateOrderStatusUseCaseImpl"
+
+import { MongoOrderRepository } from "../repositories/MongoOrderRepository"
+
+export function makeUpdateOrderStatusUseCase(): UpdateOrderStatusUseCase {
+
+    return new UpdateOrderStatusUseCaseImpl(
+
+        new MongoOrderRepository()
+    )
+}
+import { CheckoutUseCase } from "../../application/usecases/CheckoutUseCase";
+import { CheckoutUseCaseImpl } from "../../application/usecases/CheckoutUseCaseImpl";
+
+import { MongoCartRepository } from "../repositories/MongoCartRepository";
+import { MongoProductRepository } from "../repositories/MongoProductRepository";
+import { MongoOrderRepository } from "../repositories/MongoOrderRepository";
+import { MongoTransactionManager } from "../transaction/MongoTransactionManager";
+import { MongoOutboxRepository } from "../repositories/MongoOutboxRepository";
+
+import { makeClearCartUseCase } from "./clearCartFactory";
+
+export function makeCheckoutUseCase(): CheckoutUseCase {
+
+    const cartRepository = new MongoCartRepository();
+    const productRepository = new MongoProductRepository();
+    const orderRepository = new MongoOrderRepository();
+    const transactionManager = new MongoTransactionManager();
+    const clearCartUseCase = makeClearCartUseCase();
+    const outboxRepository = new MongoOutboxRepository();
+
+    return new CheckoutUseCaseImpl(
+
+        cartRepository,
+        productRepository,
+        orderRepository,
+        transactionManager,
+        clearCartUseCase
+    );
+}
+import { GetAllOrdersUseCase } from "../../application/usecases/GetAllOrdersUseCase"
+import { GetAllOrdersUseCaseImpl } from "../../application/usecases/GetAllOrdersUseCaseImpl"
+
+import { MongoOrderRepository } from "../repositories/MongoOrderRepository"
+
+export function makeGetAllOrdersUseCase(): GetAllOrdersUseCase {
+
+    return new GetAllOrdersUseCaseImpl(
+
+        new MongoOrderRepository()
+    )
+}
+import { RemoveItemFromCartUseCase } from "../../application/usecases/RemoveItemFromCartUseCase";
+import { RemoveItemFromCartUseCaseImpl } from "../../application/usecases/RemoveItemFromCartUseCaseImpl";
+
+import { MongoCartRepository } from "../repositories/MongoCartRepository";
+
+export function makeRemoveItemFromCartUseCase(): RemoveItemFromCartUseCase {
+    
+    const cartRepository = new MongoCartRepository();
+
+    return new RemoveItemFromCartUseCaseImpl(
+    
+        cartRepository
+    );
+}
+import { ClearCartUseCase } from "../../application/usecases/ClearCartUseCase";
+import { ClearCartUseCaseImpl } from "../../application/usecases/ClearCartUseCaseImpl";
+
+import { MongoCartRepository } from "../repositories/MongoCartRepository";
+
+export function makeClearCartUseCase(): ClearCartUseCase {
+
+    return new ClearCartUseCaseImpl(
+
+        new MongoCartRepository()
+    );
+}
+import { AddItemToCartUseCase } from "../../application/usecases/AddItemToCartUseCase";
+import { AddItemToCartUseCaseImpl } from "../../application/usecases/AddItemToCartUseCaseImpl";
+
+import { MongoCartRepository } from "../repositories/MongoCartRepository";
+import { MongoProductRepository } from "../repositories/MongoProductRepository";
+
+export function makeAddItemToCartUseCase() {
+
+  return new AddItemToCartUseCaseImpl(
+
+    new MongoCartRepository(),
+    new MongoProductRepository()
+  );
+}
+import { ListMyOrdersUseCase } from "../../application/usecases/ListMyOrdersUseCase"
+import { ListMyOrdersUseCaseImpl } from "../../application/usecases/ListMyOrdersUseCaseImpl"
+
+import { MongoOrderRepository } from "../repositories/MongoOrderRepository"
+
+export function makeListMyOrdersUseCase(): ListMyOrdersUseCase {
+    return new ListMyOrdersUseCaseImpl(
+        new MongoOrderRepository()
+    )
+}
+import { Outbox } from "../models/Outbox";
+import { OutboxDispatcher } from "./OutboxDispatcher";
+import { OrderPlacedHandler } from "./handlers/OrderPlacedHandler";
+import { ApplicationEvent } from "../../application/events/ApplicationEvent";
+
+type EventHandler = {
+    handle(event: ApplicationEvent): Promise<void>;
+};
+
+export class MongoOutboxDispatcher {
+
+    private readonly handlers: Record<string, EventHandler> = {
+        "order.placed": new OrderPlacedHandler(),
+    };
+
+    async dispatch(): Promise<void> {
+
+        const events = await Outbox.find({
+            processed: false,
+        })
+
+        for (const event of events) {
+
+            const handler = this.handlers[event.name];
+
+            if (!handler) {
+                // evento desconhecido → marcar como processado
+                event.processed = true;
+                event.processedAt = new Date();
+                await event.save();
+                continue;
+            }
+
+            await handler.handle({
+                name: event.name,
+                payload: event.payload,
+                occurredAt: event.occurredAt,
+            });
+
+            event.processed = true;
+            event.processedAt = new Date();
+            await event.save();
+        }
+    }
+}
+import { ApplicationEvent } from "../../../application/events/ApplicationEvent";
+
+export class OrderPlacedHandler {
+
+    async handle(event: ApplicationEvent): Promise<void> {
+
+        const { orderId, userId, total } = event.payload as {
+            orderId: string;
+            userId: string;
+            total: number;
+        };
+
+        // efeitos colaterais reais
+        // ex:
+        // await emailService.sendOrderConfirmation(...)
+        // await analytics.trackOrder(...)
+        // await logger.info(...)
+
+        console.log(
+            "[OrderPlacedHandler]",
+            { orderId, userId, total }
+        );
+    }
+}
+export interface OutboxDispatcher {
+
+    dispatch(): Promise<void>;
+}
+import cron from "node-cron";
+import { MongoOutboxDispatcher } from "./MongoOutboxDispatcher";
+
+const dispatcher = new MongoOutboxDispatcher();
+
+cron.schedule("*/10 * * * * *", async () => {
+
+    await dispatcher.dispatch();
+});
+import mongoose from "mongoose"
+import { TransactionManager } from "../../application/ports/TransactionManager"
+
+export class MongoTransactionManager implements TransactionManager {
+
+    async runInTransaction<T>(fn: () => Promise<T>): Promise<T> {
+        const session = await mongoose.startSession()
+        session.startTransaction()
+
+        try {
+            const result = await fn()
+            await session.commitTransaction()
+            return result
+        } catch (error) {
+            await session.abortTransaction()
+            throw error
+        } finally {
+            await session.endSession()
+        }
+    }
+}
+// FILE: ./src/controllers/authController.ts
+
+import { Request, Response } from "express"
+import bcrypt from "bcrypt"
+import jwt from "jsonwebtoken"
+import { User } from "../infra/models/User"
+
+// Importante: O '!' garante ao TypeScript que esta variável é uma string definida,
+// já que carregamos o .env no server.ts.
+const JWT_SECRET = (process.env.JWT_SECRET || "supersecret") as string 
+
+// =========================================================================
+// REGISTER
+// =========================================================================
+export const registerUser = async (req: Request, res: Response) => {
+
+    try {
+
+        const { name, email, password } = req.body
+
+        if (!name || !email || !password) {
+            return res.status(400).json({ error: "Nome, email e senha são obrigatórios" })
+        }
+
+        const existingUser = await User.findOne({ email })
+        if (existingUser) {
+            return res.status(409).json({ error: "E-mail já registrado" })
+        }
+
+        // Hashing da senha
+        const passwordHash = await bcrypt.hash(password, 10) 
+
+        // Criação e salvamento do usuário (role 'user' como padrão)
+        const newUser = new User({
+            name,
+            email,
+            passwordHash, 
+            role: "user",
+        })
+        await newUser.save()
+
+        // Geração do token
+        const token = jwt.sign(
+            { userId: newUser._id, role: newUser.role },
+            JWT_SECRET,
+            { expiresIn: "1d" },
+        )
+
+        // Retorna 201 Created com o token
+        // O campo passwordHash é omitido automaticamente pelo modelo (deve ser, pelo menos)
+        res.status(201).json({
+            token,
+            user: {
+                _id: newUser._id,
+                name: newUser.name,
+                email: newUser.email,
+                role: newUser.role,
+            },
+        })
+    } catch (error) {
+        console.error("Erro no registro de usuário:", error)
+        res.status(500).json({ error: "Erro interno ao registrar usuário." })
+    }
+}
+
+// =========================================================================
+// LOGIN
+// =========================================================================
+export const loginUser = async (req: Request, res: Response) => {
+    try {
+        const { email, password } = req.body
+        
+        // 1. Busca o usuário, OBRIGANDO a retornar o passwordHash
+        // Se o campo de senha no modelo estiver com `select: false`, esta linha o recupera.
+        const user = await User.findOne({ email }).select("+passwordHash")
+
+        if (!user) {
+            return res.status(401).json({ error: "Credenciais inválidas" })
+        }
+
+        // 2. Compara a senha (user.passwordHash agora é garantido)
+        // Se user.passwordHash for null/undefined, bcrypt.compare lança exceção (o que causava o 500)
+        const isMatch = await bcrypt.compare(password, user.passwordHash || "") // Usamos "" como fallback seguro
+
+        if (!isMatch) {
+            return res.status(401).json({ error: "Credenciais inválidas" })
+        }
+
+        // 3. Geração do token
+        const token = jwt.sign(
+            { userId: user._id, role: user.role },
+            JWT_SECRET,
+            { expiresIn: "1d" },
+        )
+
+        res.json({ token, role: user.role })
+    } catch (error) {
+        console.error("Erro no login (Possível falha no bcrypt ou JWT):", error)
+        res.status(500).json({ error: "Erro interno do servidor." })
+    }
+}import { Request, Response } from "express"
+import { User } from "../infra/models/User"
+import { Product } from "../infra/models/Product"
+import { Order } from "../infra/models/Order"
+import { Cart } from "../infra/models/Cart"
+
+export const getStats = async (req: Request, res: Response) => {
+
+    try {
+
+        const { startDate, endDate } = req.query
+        const start = startDate
+            ? new Date(startDate as string)
+            : new Date("1970-01-01")
+        const end = endDate ? new Date(endDate as string) : new Date()
+
+        // Filtro de data para todas as queries
+        const dateFilter = { createdAt: { $gte: start, $lte: end } }
+
+        // 1. Executar todas as consultas independentes em paralelo com Promise.all
+        const [users, products, orders, ordersByStatus, carts, topSelling] =
+
+            await Promise.all([
+
+                // Usuários
+                User.find(dateFilter),
+
+                // Produtos
+                Product.find(dateFilter),
+
+                // Pedidos
+                Order.find(dateFilter),
+
+                // Pedidos por Status (Aggregation)
+                Order.aggregate([
+                    { $match: dateFilter },
+                    { $group: { _id: "$status", count: { $sum: 1 } } },
+                ]),
+
+                // Carrinhos
+                Cart.find(dateFilter),
+
+                // Top Selling (Aggregation)
+                Order.aggregate([
+                    { $match: dateFilter },
+                    { $unwind: "$items" },
+                    {
+                        $group: {
+                            _id: "$items.productId",
+                            sold: { $sum: "$items.quantity" },
+                        },
+                    },
+                    { $sort: { sold: -1 } },
+                    { $limit: 5 },
+                ]),
+            ])
+
+        // 2. Cálculo e processamento dos resultados (Utilizando os dados já obtidos)
+
+        // Processamento de Usuários
+        const totalUsers = users.length
+        const admins = users.filter((u) => u.role === "admin").length
+        const normalUsers = users.filter((u) => u.role === "user").length
+
+        // Processamento de Produtos
+        const totalProducts = products.length
+
+        // Processamento de Pedidos
+        const totalOrders = orders.length
+        const revenueTotal = orders.reduce((acc, o) => acc + o.total, 0)
+        const avgTicket = totalOrders > 0 ? revenueTotal / totalOrders : 0
+
+        // Processamento de Carrinhos
+        const avgItems =
+            carts.length > 0
+                ? carts.reduce((acc, c) => acc + c.items.length, 0) /
+                  carts.length
+                : 0
+        const conversionRate =
+            carts.length > 0 ? totalOrders / carts.length : 0
+
+        // 3. Resposta Final
+        res.json({
+
+            period: { start, end },
+            users: { total: totalUsers, admins, users: normalUsers },
+            products: { total: totalProducts, topSelling },
+            orders: {
+                total: totalOrders,
+                revenueTotal,
+                avgTicket,
+                byStatus: ordersByStatus,
+            },
+            carts: { avgItems, conversionRate },
+        })
+    } catch (error) {
+
+        res.status(500).json({
+            error: "Erro ao gerar estatísticas consolidadas",
+        })
+    }
+}
+import { Request, Response } from "express"
+import { makeCheckoutUseCase } from "../infra/factories/checkoutFactory"
+import { makeUpdateOrderStatusUseCase } from "../infra/factories/updateOrderStatusFactory"
+import { makeListMyOrdersUseCase } from "../infra/factories/listMyOrdersFactory"
+import { makeGetAllOrdersUseCase } from "../infra/factories/getAllOrdersFactory"
+import {
+  CartEmptyError,
+  ProductNotFoundError,
+  InsufficientStockError,
+} from "../domain/errors/CheckoutErrors";
+
+
+/**
+ * POST /orders/checkout
+ */
+export async function checkout(req: Request, res: Response) {
+
+    try {
+
+        const user = req.user
+        if (!user) {
+
+            return res.status(401).json({ message: "Unauthorized" })
+        }
+
+        const checkoutUseCase = makeCheckoutUseCase()
+        const result = await checkoutUseCase.execute({
+            userId: req.user!.id,
+        });
+
+        return res.status(201).json({
+            order: {
+                id: result.orderId,
+                status: result.status,
+                total: result.total,
+            },
+        });
+    } catch (error) {
+        console.error("CHECKOUT ERROR:", error);
+        return res.status(500).json({ error: "Erro interno" });
+    }
+
+    return res.status(500).json({
+        error: "Erro interno do servidor",
+    });
+}
+
+/**
+ * PATCH /orders/:id/status
+ */
+export async function updateOrderStatus(req: Request, res: Response) {
+
+    try {
+
+        const orderId = req.params.id
+        if (!orderId) {
+
+            return res.status(400).json({ message: "Order id is required" })
+        }
+
+        const user = req.user
+        if (!user || !user.role) {
+
+            return res.status(401).json({ message: "Unauthorized" })
+        }
+
+        const { status } = req.body
+        if (!status) {
+
+            return res.status(400).json({ message: "New status is required" })
+        }
+
+        const useCase = makeUpdateOrderStatusUseCase()
+
+        const result = await useCase.execute({
+
+            orderId,
+            newStatus: status,
+            actor: {
+                id: user.id,
+                role: user.role,
+            },
+        })
+
+        return res.status(200).json(result)
+    } catch (error) {
+
+        return res.status(400).json({
+
+            message: (error as Error).message,
+        })
+    }
+}
+
+/* ===================================================== */
+/* Abaixo: endpoints ainda NÃO migrados para Use Cases   */
+/* (ficam como estão nesta fase)                         */
+/* ===================================================== */
+
+export async function createOrder(req: Request, res: Response) {
+
+    // implementação existente (não alterada nesta fase)
+}
+
+export async function getMyOrders(req: Request, res: Response) {
+
+    try {
+
+        const user = req.user
+        if (!user) {
+
+            return res.status(401).json({ message: "Unauthorized" })
+        }
+
+        const useCase = makeListMyOrdersUseCase()
+        const orders = await useCase.execute({
+
+            userId: user.id
+        })
+
+        return res.status(200).json(orders)
+    } catch (error) {
+
+        return res.status(500).json({
+
+            message: (error as Error).message
+        })
+    }
+}
+
+export async function getAllOrders(req: Request, res: Response) {
+
+    try {
+
+        const user = req.user
+        if (!user) {
+
+            return res.status(401).json({ message: "Unauthorized" })
+        }
+
+        const useCase = makeGetAllOrdersUseCase()
+        const orders = await useCase.execute({
+
+            actor: {
+                id: user.id,
+                role: user.role
+            }
+        })
+
+        return res.status(200).json(orders)
+    } catch (error) {
+
+        return res.status(403).json({
+
+            message: (error as Error).message
+        })
+    }
+}
+import { Request, Response } from "express";
+
+import { makeGetCartUseCase } from "../infra/factories/getCartFactory";
+import { makeAddItemToCartUseCase } from "../infra/factories/addItemToCartFactory";
+import { makeRemoveItemFromCartUseCase } from "../infra/factories/removeItemFromCartFactory";
+import { makeClearCartUseCase } from "../infra/factories/clearCartFactory";
+
+export async function getCart(req: Request, res: Response) {
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const useCase = makeGetCartUseCase();
+    const cart = await useCase.execute({ userId: user.id });
+
+    return res.status(200).json({ cart });
+}
+
+export async function addItemToCart(req: Request, res: Response) {
+
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const { productId, quantity } = req.body;
+    if (!productId || !quantity) {
+        return res.status(400).json({ message: "Invalid payload" });
+    }
+
+    try {
+        const addUseCase = makeAddItemToCartUseCase();
+        await addUseCase.execute({
+            userId: user.id,
+            productId,
+            quantity,
+        });
+
+        // IMPORTANTE: buscar carrinho atualizado
+        const getUseCase = makeGetCartUseCase();
+        const cart = await getUseCase.execute({ userId: user.id });
+
+        return res.status(200).json({ cart });
+    } catch (error: any) {
+        if (error instanceof ProductNotFoundError) {
+            return res.status(404).json({ message: error.message });
+        }
+
+        return res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export async function removeItemFromCart(req: Request, res: Response) {
+
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const { productId } = req.body;
+    if (!productId) {
+        return res.status(400).json({ message: "Invalid payload" });
+    }
+
+    try {
+        const removeUseCase = makeRemoveItemFromCartUseCase();
+        await removeUseCase.execute({
+            userId: user.id,
+            productId,
+        });
+
+        const getUseCase = makeGetCartUseCase();
+        const cart = await getUseCase.execute({ userId: user.id });
+
+        return res.status(200).json({ cart });
+    } catch (error: any) {
+        if (error instanceof CartNotFoundError) {
+            return res.status(404).json({ message: error.message });
+        }
+
+        return res.status(500).json({ message: error.message });
+    }
+}
+
+export async function clearCart(req: Request, res: Response) {
+
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const useCase = makeClearCartUseCase();
+    await useCase.execute({ userId: user.id });
+
+    return res.status(200).json({
+        cart: { items: [] }
+    });
+}
+
+import { Request, Response } from "express"
+import { Address } from "../infra/models/Address"
+import mongoose from "mongoose"
+
+// Função auxiliar para garantir que apenas um endereço seja o padrão
+const ensureOnlyOneDefault = async (userId: mongoose.Types.ObjectId, currentAddressId?: mongoose.Types.ObjectId) => {
+
+    // Define todos os outros endereços (exceto o atual, se fornecido) como não-padrão
+    const filter: any = { userId }
+    if (currentAddressId) {
+
+        filter._id = { $ne: currentAddressId }
+    }
+
+    await Address.updateMany(filter, { isDefault: false })
+}
+
+// =========================================================================
+// POST /api/addresses - Criar novo endereço
+// =========================================================================
+export const createAddress = async (req: Request, res: Response) => {
+
+    try {
+
+        const userId = req.user?.id
+        if (!userId) {
+
+            return res.status(401).json({ error: "Usuário não autenticado." })
+        }
+
+        ;
+
+        const { street, city, state, zipCode, country, isDefault } = req.body
+
+        if (!street || !city || !state || !zipCode) {
+
+            return res.status(400).json({ error: "Campos obrigatórios ausentes." })
+        }
+
+        const addressData = {
+            userId,
+            street,
+            city,
+            state,
+            zipCode,
+            country,
+            isDefault: isDefault === true,
+        }
+
+        if (addressData.isDefault) {
+
+            await ensureOnlyOneDefault(new mongoose.Types.ObjectId(userId))
+        }
+
+        const newAddress = new Address(addressData)
+        await newAddress.save()
+        
+        res.status(201).json({ message: "Endereço criado com sucesso", address: newAddress })
+    } catch (error) {
+
+        console.error("Erro ao criar endereço:", error)
+        res.status(500).json({ error: "Erro interno ao criar endereço." })
+    }
+}
+
+// =========================================================================
+// GET /api/addresses - Listar todos os endereços do usuário
+// =========================================================================
+export const getAddresses = async (req: Request, res: Response) => {
+
+    try {
+
+        const userId = req.user?.id
+        if (!userId) {
+
+            return res.status(401).json({ error: "Usuário não autenticado." })
+        }
+
+        const addresses = await Address.find({ userId }).sort({ isDefault: -1, createdAt: 1 })
+        
+        res.json(addresses)
+    } catch (error) {
+
+        console.error("Erro ao buscar endereços:", error)
+        res.status(500).json({ error: "Erro interno ao buscar endereços." })
+    }
+}
+
+// =========================================================================
+// PUT /api/addresses/:id - Atualizar endereço
+// =========================================================================
+export const updateAddress = async (req: Request, res: Response) => {
+
+    try {
+
+        const userId = req.user?.id
+        if (!userId) return res.status(401).json({ error: "Usuário não autenticado." })
+
+        const { id } = req.params
+        const updateData = req.body
+        
+        // Garante que o usuário só pode atualizar seus próprios endereços
+        const objectId = new mongoose.Types.ObjectId(id)
+        const objectUserId = new mongoose.Types.ObjectId(userId)
+
+        const address = await Address.findOne({ _id: objectId, userId: objectUserId })
+        if (!address) {
+
+            return res.status(404).json({ error: "Endereço não encontrado ou não pertence ao usuário." })
+        }
+
+        if (updateData.isDefault === true) {
+
+            await ensureOnlyOneDefault(new mongoose.Types.ObjectId(userId), new mongoose.Types.ObjectId(id))
+        }
+
+        const updatedAddress = await Address.findByIdAndUpdate(id, updateData, { new: true })
+        
+        res.json({ message: "Endereço atualizado com sucesso", address: updatedAddress })
+    } catch (error) {
+
+        console.error("Erro ao atualizar endereço:", error)
+        res.status(500).json({ error: "Erro interno ao atualizar endereço." })
+    }
+}
+
+// =========================================================================
+// DELETE /api/addresses/:id - Deletar endereço
+// =========================================================================
+export const deleteAddress = async (req: Request, res: Response) => {
+
+    try {
+
+        const userId = req.user?.id
+        if (!userId) {
+
+            return res.status(401).json({ error: "Usuário não autenticado." })
+        }
+
+        const { id } = req.params
+
+        const objectId = new mongoose.Types.ObjectId(id)
+        const objectUserId = new mongoose.Types.ObjectId(userId)
+        
+        // Garante que o usuário só pode deletar seus próprios endereços
+        const deletedAddress = await Address.findOneAndDelete({ _id: objectId, userId: objectUserId })
+        
+        if (!deletedAddress) {
+
+            return res.status(404).json({ error: "Endereço não encontrado ou não pertence ao usuário." })
+        }
+        
+        res.json({ message: "Endereço removido com sucesso" })
+    } catch (error) {
+
+        console.error("Erro ao deletar endereço:", error)
+        res.status(500).json({ error: "Erro interno ao deletar endereço." })
+    }
+}import { Request, Response } from "express"
+import { User } from "../infra/models/User"
+
+export const getAllUsers = async (req: Request, res: Response) => {
+    try {
+        const users = await User.find().select("-passwordHash")
+        res.json(users)
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao listar usuários" })
+    }
+}
+
+export const getUserById = async (req: Request, res: Response) => {
+    try {
+        const user = await User.findById(req.params.id).select("-passwordHash")
+        if (!user)
+            return res.status(404).json({ error: "Usuário não encontrado" })
+
+        res.json(user)
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao buscar usuário" })
+    }
+}
+
+export const updateUser = async (req: Request, res: Response) => {
+    try {
+        const updatedUser = await User.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true },
+        ).select("-passwordHash")
+        if (!updatedUser)
+            return res.status(404).json({ error: "Usuário não encontrado" })
+
+        res.json({
+            message: "Usuário atualizado com sucesso!",
+            user: updatedUser,
+        })
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao atualizar usuário" })
+    }
+}
+
+export const deleteUser = async (req: Request, res: Response) => {
+    try {
+        const deletedUser = await User.findByIdAndDelete(req.params.id)
+        if (!deletedUser)
+            return res.status(404).json({ error: "Usuário não encontrado" })
+
+        res.json({ message: "Usuário removido com sucesso!" })
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao remover usuário" })
+    }
+}
+import { Request, Response } from "express"
+import { Product } from "../infra/models/Product"
+
+// Lógica para criar produto
+export const createProduct = async (req: Request, res: Response) => {
+    try {
+        const { name, description, price, stock } = req.body
+        // Validação básica se quiser adicionar
+        if (!name || !price) {
+            return res
+                .status(400)
+                .json({ error: "Nome e preço são obrigatórios" })
+        }
+
+        const newProduct = new Product({ name, description, price, stock })
+        await newProduct.save()
+        res.status(201).json({
+            message: "Produto criado com sucesso!",
+            product: newProduct,
+        })
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao criar produto" })
+    }
+}
+
+// Lógica para listar produtos
+export const getAllProducts = async (req: Request, res: Response) => {
+    try {
+        const products = await Product.find()
+        res.json(products)
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao listar produtos" })
+    }
+}
+
+// Lógica para atualizar produto
+export const updateProduct = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params
+        const updatedProduct = await Product.findByIdAndUpdate(id, req.body, {
+            new: true,
+        })
+        if (!updatedProduct) {
+            return res.status(404).json({ error: "Produto não encontrado" })
+        }
+
+        res.json({
+            message: "Produto atualizado com sucesso!",
+            product: updatedProduct,
+        })
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao atualizar produto" })
+    }
+}
+
+// Lógica para deletar produto
+export const deleteProduct = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params
+        const deletedProduct = await Product.findByIdAndDelete(id)
+        if (!deletedProduct) {
+            return res.status(404).json({ error: "Produto não encontrado" })
+        }
+
+        res.json({ message: "Produto removido com sucesso!" })
+    } catch (error) {
+        res.status(500).json({ error: "Erro ao remover produto" })
+    }
+}
+// FILE: src/utils/logger.ts
+
+/**
+ * Níveis de severidade de log.
+ */
+type LogLevel = "INFO" | "WARN" | "ERROR" | "DEBUG";
+
+/**
+ * Função de log simples e formatada.
+ * Ideal para logs no servidor, adicionando timestamps e níveis.
+ * * @param level O nível de severidade da mensagem.
+ * @param message A mensagem principal a ser logada.
+ * @param details (Opcional) Detalhes adicionais, como um objeto de erro.
+ */
+export const log = (
+    level: LogLevel,
+    message: string,
+    details?: any
+) => {
+    // 1. Definição do carimbo de data/hora (Timestamp)
+    const timestamp = new Date().toISOString()
+
+    // 2. Formatação da mensagem principal
+    const logMessage = `[${timestamp}] [${level}] - ${message}`
+
+    // 3. Escolha do console method baseado no nível
+    const consoleMethod = 
+        level === "ERROR" ? console.error :
+            level === "WARN" ? console.warn :
+                console.log // INFO ou DEBUG
+
+    // 4. Exibir o log
+    if (details) {
+        // Se houver detalhes, loga a mensagem e os detalhes no console
+        consoleMethod(logMessage, details)
+    } else {
+        // Se não houver detalhes, loga apenas a mensagem
+        consoleMethod(logMessage)
+    }
+
+    // Nota: Em um ambiente real, você faria aqui:
+    // - Envio para um serviço de monitoramento (e.g., Sentry, DataDog).
+    // - Escrita em um arquivo de log (File System).
+}
+
+// Exemplo de uso
+// log('INFO', 'Servidor inicializado com sucesso.');
+// log('ERROR', 'Falha ao conectar ao DB', new Error('Connection refused'));import mongoose from "mongoose"
+import { config } from "dotenv"
+import app from "./app"
+
+config()
+
+const PORT = process.env.PORT || 4000
+
+mongoose
+    .connect(process.env.MONGO_URI as string)
+    .then(() => {
+        console.log("Conectado ao MongoDB Atlas")
+        app.listen(PORT, () => {
+            console.log(`Servidor rodando na porta ${PORT}`)
+        })
+    })
+    .catch((err) => {
+        console.error("Erro ao conectar ao MongoDB:", err)
+    })
+export type ProductSnapshot = {
+    id: string;
+    price: number;
+    stock: number;
+};
+export type OrderItem = {
+    productId: string;
+    quantity: number;
+};
+export class DomainError extends Error {
+
+    constructor(public readonly code: string, message?: string  ) {
+        
+        super(message || code)
+    }
+}
+import { DomainError } from "./DomainError"
+
+export class CartEmptyError extends DomainError {
+
+    constructor() {
+
+        super("CART_EMPTY", "Carrinho vazio")
+    }
+}
+
+export class ProductNotFoundError extends DomainError {
+
+    constructor(productId?: string) {
+
+        super(
+
+            "PRODUCT_NOT_FOUND",
+            productId
+                ? `Produto ${productId} não encontrado`
+                : "Produto não encontrado"
+        )
+    }
+}
+
+export class InsufficientStockError extends DomainError {
+
+    constructor(productName: string, available: number, requested: number) {
+
+        super(
+
+            "INSUFFICIENT_STOCK",
+            `Estoque insuficiente para ${productName}. Disponível: ${available}, solicitado: ${requested}`
+        )
+    }
+}
+export class CartNotFoundError extends Error {
+
+    public readonly userId: string;
+
+    constructor(userId: string) {
+        super(`Cart not found for user ${userId}`);
+        this.name = "CartNotFoundError";
+        this.userId = userId;
+    }
+}
+
+export class ProductNotFoundError extends Error {
+
+    public readonly productId: string;
+
+    constructor(productId: string) {
+        super(`Product not found: ${productId}`);
+        this.name = "ProductNotFoundError";
+    }
+}
+export interface DomainEventHandler<T> {
+    handle(event: T): Promise<void> | void;
+}
+import { DomainEventHandler } from "./DomainEventHandler"
+
+type EventClass<T> = new (...args: any[]) => T;
+
+export class EventBus {
+
+    private handlers = new Map<string, DomainEventHandler<any>[]>()
+
+    subscribe<T extends object>(
+        event: EventClass<T>,
+        handler: DomainEventHandler<T>
+    ) {
+
+        const eventName = event.name
+
+        const existing = this.handlers.get(eventName) ?? []
+        existing.push(handler)
+
+        this.handlers.set(eventName, existing)
+    }
+
+    async publish<T extends object>(event: T) {
+
+        const eventName = event.constructor.name
+        const handlers = this.handlers.get(eventName) ?? []
+
+        for (const handler of handlers) {
+            await handler.handle(event)
+        }
+    }
+}
+export class OrderCreatedEvent {
+
+    readonly occurredAt: Date
+
+    constructor(
+        public readonly orderId: string,
+        public readonly userId: string,
+        public readonly total: number
+    ) {
+
+        this.occurredAt = new Date()
+    }
+}
+import { DomainError } from "../errors/DomainError"
+
+const allowedTransitions: Record<string, string[]> = {
+    pending: ["paid"],
+    paid: ["shipped"],
+    shipped: ["delivered"],
+}
+
+export class OrderStatusDomainService {
+
+    validateTransition(
+        currentStatus: string,
+        newStatus: string
+    ) {
+        const allowed = allowedTransitions[currentStatus] || []
+
+        if (!allowed.includes(newStatus)) {
+            throw new DomainError(
+                `Invalid status transition from ${currentStatus} to ${newStatus}`
+            )
+        }
+    }
+
+    validatePermission(
+        actorRole: "admin" | "user",
+        currentStatus: string,
+        newStatus: string
+    ) {
+        if (actorRole !== "admin") {
+            throw new DomainError("Only admin can change order status")
+        }
+    }
+}
+import { OrderItem } from "../types/OrderItem"
+import { ProductSnapshot } from "../types/ProductSnapshot"
+import { DomainError } from "../errors/DomainError"
+
+export class OrderValidationService {
+
+    validateAndCalculateTotal(
+        items: OrderItem[],
+        products: ProductSnapshot[]
+    ): number {
+
+        const productMap: Record<string, ProductSnapshot> = {}
+
+        for (const product of products) {
+            productMap[product.id] = product
+        }
+
+        let total = 0
+
+        for (const item of items) {
+            const product = productMap[item.productId]
+
+            if (!product) {
+                throw new DomainError(
+                    `Product not found: ${item.productId}`
+                )
+            }
+
+            if (product.stock < item.quantity) {
+                throw new DomainError(
+                    `Insufficient stock for product: ${item.productId}`
+                )
+            }
+
+            total += product.price * item.quantity
+        }
+
+        return total
+    }
+}
+import { DomainError } from "../errors/DomainError"
+
+export type OrderStatus =
+  | "pending"
+  | "paid"
+  | "shipped"
+  | "completed"
+  | "cancelled";
+
+export interface OrderItem {
+    productId: string;
+    quantity: number;
+}
+
+export class Order {
+
+    private _status: OrderStatus
+
+    private readonly _items: OrderItem[]
+
+    private readonly _total: number
+
+    constructor(
+
+        status: OrderStatus,
+        items: OrderItem[],
+        total: number
+    ) {
+
+        if (items.length === 0) {
+
+            throw new DomainError("ORDER_WITHOUT_ITEMS")
+        }
+
+        if (total <= 0) {
+
+            throw new DomainError("INVALID_ORDER_TOTAL")
+        }
+
+        this._status = status
+        this._items = items
+        this._total = total
+    }
+
+    // =====================
+    // Getters
+    // =====================
+
+    get status() {
+
+        return this._status
+    }
+
+    get total() {
+
+        return this._total
+    }
+
+    get items() {
+
+        return [...this._items]
+    }
+
+    // =====================
+    // Comportamentos
+    // =====================
+
+    markAsPaid() {
+
+        if (this._status !== "pending") {
+
+            throw new DomainError(
+
+                "INVALID_STATUS_TRANSITION",
+                `Cannot pay order in status ${this._status}`
+            )
+        }
+
+        this._status = "paid"
+    }
+
+    ship() {
+
+        if (this._status !== "paid") {
+
+            throw new DomainError(
+
+                "INVALID_STATUS_TRANSITION",
+                `Cannot ship order in status ${this._status}`
+            )
+        }
+
+        this._status = "shipped"
+    }
+
+    complete() {
+
+        if (this._status !== "shipped") {
+
+            throw new DomainError(
+
+                "INVALID_STATUS_TRANSITION",
+                `Cannot complete order in status ${this._status}`
+            )
+        }
+
+        this._status = "completed"
+    }
+
+
+    cancel() {
+
+        if (this._status === "shipped") {
+
+            throw new DomainError(
+
+                "ORDER_CANNOT_BE_CANCELLED",
+                "Order already shipped"
+            )
+        }
+
+        this._status = "cancelled"
+    }
+}
+import express from "express"
+import cors from "cors"
+import authRoutes from "./routes/authRoutes"
+import cartRoutes from "./routes/cartRoutes"
+import productRoutes from "./routes/productRoutes"
+import adminRoutes from "./routes/adminRoutes"
+import userRoutes from "./routes/userRoutes"
+import orderRoutes from "./routes/orderRoutes"
+import addressRoutes from "./routes/addressRoutes"
+
+const app = express()
+ 
+// Middlewares
+app.use(cors())
+app.use(express.json())
+
+app.use("/api/admin", adminRoutes)
+app.use("/api/auth", authRoutes)
+app.use("/api/users", userRoutes)
+app.use("/api/cart", cartRoutes)
+app.use("/api/products", productRoutes)
+app.use("/api/orders", orderRoutes)
+app.use("/api/addresses", addressRoutes)
+
+export default app
+import "express"
+
+declare module "express-serve-static-core" {
+
+    interface Request {
+
+        user?: {
+            id: string;
+            role: "user" | "admin";
+        };
+    }
+}
+
+import { DomainEventHandler } from "../../domain/events/DomainEventHandler"
+import { OrderCreatedEvent } from "../../domain/events/OrderCreatedEvent"
+
+export class UpdateSalesMetricsHandler
+implements DomainEventHandler<OrderCreatedEvent> {
+
+    async handle(event: OrderCreatedEvent) {
+        console.log(
+            `[METRICS] Nova venda registrada: R$ ${event.total}`
+        )
+    }
+}
+import { DomainEventHandler } from "../../domain/events/DomainEventHandler"
+import { OrderCreatedEvent } from "../../domain/events/OrderCreatedEvent"
+
+export class SendOrderEmailHandler
+implements DomainEventHandler<OrderCreatedEvent> {
+
+    async handle(event: OrderCreatedEvent) {
+        console.log(
+            `[EMAIL] Pedido ${event.orderId} criado para usuário ${event.userId}`
+        )
+    }
+}
+import {
+    ListMyOrdersUseCase,
+    ListMyOrdersInput,
+    OrderSummary
+} from "./ListMyOrdersUseCase"
+
+import { OrderRepository } from "../ports/OrderRepository"
+
+export class ListMyOrdersUseCaseImpl
+implements ListMyOrdersUseCase {
+
+    constructor(
+        private readonly orderRepository: OrderRepository
+    ) {}
+
+    async execute(
+        { userId }: ListMyOrdersInput
+    ): Promise<OrderSummary[]> {
+
+        return this.orderRepository.findByUserId(userId)
+    }
+}
+export type GetAllOrdersInput = {
+    actor: {
+        id: string;
+        role: "admin" | "user";
+    };
+};
+
+export type OrderSummary = {
+    id: string;
+    userId: string;
+    status: string;
+    total: number;
+    createdAt: Date;
+};
+
+export interface GetAllOrdersUseCase {
+    execute(input: GetAllOrdersInput): Promise<OrderSummary[]>;
+}
+import {
+    RemoveItemFromCartUseCase,
+    RemoveItemFromCartInput,
+} from "./RemoveItemFromCartUseCase";
+
+import { CartRepository } from "../ports/CartRepository";
+import { CartNotFoundError } from "../../domain/errors/CartNotFoundError";
+
+export class RemoveItemFromCartUseCaseImpl
+    implements RemoveItemFromCartUseCase {
+
+    constructor(
+        private readonly cartRepository: CartRepository
+    ) {}
+
+    async execute(
+        { userId, productId }: RemoveItemFromCartInput
+    ): Promise<void> {
+        await this.cartRepository.removeItem(userId, productId);
+    }
+}
+import { ClearCartUseCase, ClearCartInput } from "./ClearCartUseCase";
+import { CartRepository } from "../ports/CartRepository";
+
+export class ClearCartUseCaseImpl implements ClearCartUseCase {
+
+    constructor(
+        private readonly cartRepository: CartRepository
+    ) {}
+
+    async execute({ userId }: ClearCartInput): Promise<void> {
+
+        const cart = await this.cartRepository.findByUserId(userId);
+
+        // comportamento idempotente:
+        // se o carrinho não existe, não é erro
+        if (!cart) {
+            return;
+        }
+
+        await this.cartRepository.clear(userId);
+    }
+}
+export type RemoveItemFromCartInput = {
+    userId: string;
+    productId: string;
+};
+
+export interface RemoveItemFromCartUseCase {
+    execute(input: RemoveItemFromCartInput): Promise<void>;
+}
+import {
+    UpdateOrderStatusUseCase,
+    UpdateOrderStatusInput,
+    UpdateOrderStatusOutput
+} from "./UpdateOrderStatusUseCase"
+
+import { OrderRepository } from "../ports/OrderRepository"
+import { OrderStatusDomainService } from "../../domain/services/OrderStatusDomainService"
+import { DomainError } from "../../domain/errors/DomainError"
+
+export class UpdateOrderStatusUseCaseImpl
+implements UpdateOrderStatusUseCase {
+
+    private readonly statusService = new OrderStatusDomainService()
+
+    constructor(
+        private readonly orderRepository: OrderRepository
+    ) {}
+
+    async execute(
+        input: UpdateOrderStatusInput
+    ): Promise<UpdateOrderStatusOutput> {
+
+        const order = await this.orderRepository.findById(input.orderId)
+
+        if (!order) {
+            throw new DomainError("Order not found")
+        }
+
+        this.statusService.validatePermission(
+            input.actor.role,
+            order.status,
+            input.newStatus
+        )
+
+        this.statusService.validateTransition(
+            order.status,
+            input.newStatus
+        )
+
+        await this.orderRepository.updateStatus(
+            order.id,
+            input.newStatus
+        )
+
+        return {
+            orderId: order.id,
+            previousStatus: order.status,
+            currentStatus: input.newStatus
+        }
+    }
+}
+export type UpdateOrderStatusInput = {
+    orderId: string;
+    newStatus: string;
+    actor: {
+        id: string;
+        role: "admin" | "user";
+    };
+};
+
+export type UpdateOrderStatusOutput = {
+    orderId: string;
+    previousStatus: string;
+    currentStatus: string;
+};
+
+export interface UpdateOrderStatusUseCase {
+    execute(input: UpdateOrderStatusInput): Promise<UpdateOrderStatusOutput>;
+}
+export type ListMyOrdersInput = {
+    userId: string;
+};
+
+export type OrderSummary = {
+    id: string;
+    status: string;
+    total: number;
+    createdAt: Date;
+};
+
+export interface ListMyOrdersUseCase {
+    execute(input: ListMyOrdersInput): Promise<OrderSummary[]>;
+}
+export type CheckoutInput = {
+
+        userId: string;
+};
+
+export type CheckoutOutput = {
+
+        orderId: string;
+        status: string;
+        total: number;
+};
+
+export interface CheckoutUseCase {
+
+        execute(input: CheckoutInput): Promise<CheckoutOutput>;
+}
+import { GetCartUseCase, GetCartInput, CartOutput } from "./GetCartUseCase"
+import { CartRepository } from "../ports/CartRepository"
+
+export class GetCartUseCaseImpl
+implements GetCartUseCase {
+
+    constructor(
+
+        private readonly cartRepository: CartRepository
+    ) {}
+
+    async execute({ userId }: GetCartInput): Promise<CartOutput> {
+
+        const cart = await this.cartRepository.findByUserId(userId)
+
+        return {
+
+            items: cart?.items ?? []
+        }
+    }
+}
+export type ClearCartInput = {
+    userId: string;
+};
+
+export interface ClearCartUseCase {
+    execute(input: ClearCartInput): Promise<void>;
+}
+import {
+    GetAllOrdersUseCase,
+    GetAllOrdersInput,
+    OrderSummary
+} from "./GetAllOrdersUseCase"
+
+import { OrderRepository } from "../ports/OrderRepository"
+import { DomainError } from "../../domain/errors/DomainError"
+
+export class GetAllOrdersUseCaseImpl
+implements GetAllOrdersUseCase {
+
+    constructor(
+        private readonly orderRepository: OrderRepository
+    ) {}
+
+    async execute(
+        { actor }: GetAllOrdersInput
+    ): Promise<OrderSummary[]> {
+
+        if (actor.role !== "admin") {
+            throw new DomainError("Access denied")
+        }
+
+        return this.orderRepository.findAll()
+    }
+}
+import {
+    AddItemToCartUseCase,
+    AddItemToCartInput,
+} from "./AddItemToCartUseCase";
+
+import { CartRepository } from "../ports/CartRepository";
+import { ProductRepository } from "../ports/ProductRepository";
+
+import { ProductNotFoundError } from "../../domain/errors/ProductNotFoundError";
+import { InsufficientStockError } from "../../domain/errors/CheckoutErrors";
+
+export class AddItemToCartUseCaseImpl implements AddItemToCartUseCase {
+
+    constructor(
+        private readonly cartRepository: CartRepository,
+        private readonly productRepository: ProductRepository
+    ) {}
+
+    async execute({
+        userId,
+        productId,
+        quantity,
+    }: AddItemToCartInput): Promise<void> {
+
+        // 1. Verificar se o produto existe
+        const product = await this.productRepository.findById(productId);
+
+        if (!product) {
+            throw new ProductNotFoundError(productId);
+        }
+
+        // 2. Verificar estoque
+        if (product.stock < quantity) {
+            throw new InsufficientStockError(
+                productId,
+                product.stock,
+                quantity
+            );
+        }
+
+        // 3. Delegar a persistência ao repositório
+        await this.cartRepository.addItem(
+            userId,
+            productId,
+            quantity
+        );
+    }
+}
+export type GetCartInput = {
+
+    userId: string;
+};
+
+export type CartItemOutput = {
+
+    productId: string;
+    quantity: number;
+};
+
+export type CartOutput = {
+
+    items: CartItemOutput[];
+};
+
+export interface GetCartUseCase {
+
+    execute(input: GetCartInput): Promise<CartOutput>;
+}
+export type AddItemToCartInput = {
+    userId: string;
+    productId: string;
+    quantity: number;
+};
+
+export interface AddItemToCartUseCase {
+    execute(input: AddItemToCartInput): Promise<void>;
+}
+import {
+    CheckoutUseCase,
+    CheckoutInput,
+    CheckoutOutput,
+} from "./CheckoutUseCase";
+
+import { CartRepository } from "../ports/CartRepository";
+import { ProductRepository } from "../ports/ProductRepository";
+import { OrderRepository } from "../ports/OrderRepository";
+import { TransactionManager } from "../ports/TransactionManager";
+
+import { ClearCartUseCase } from "./ClearCartUseCase";
+
+import { Order } from "../../domain/entities/Order";
+import { OrderValidationService } from "../../domain/services/OrderValidationService";
+import { CartEmptyError } from "../../domain/errors/CheckoutErrors";
+
+export class CheckoutUseCaseImpl implements CheckoutUseCase {
+
+    private readonly orderValidationService =
+        new OrderValidationService();
+
+    constructor(
+        private readonly cartRepository: CartRepository,
+        private readonly productRepository: ProductRepository,
+        private readonly orderRepository: OrderRepository,
+        private readonly transactionManager: TransactionManager,
+        private readonly clearCartUseCase: ClearCartUseCase
+    ) {}
+
+    async execute(
+        { userId }: CheckoutInput
+    ): Promise<CheckoutOutput> {
+
+        return this.transactionManager.runInTransaction(
+            async () => {
+
+                const cart =
+                    await this.cartRepository.findByUserId(userId);
+
+                if (!cart || cart.items.length === 0) {
+                    throw new CartEmptyError();
+                }
+
+                const productIds = cart.items.map(i => i.productId);
+                const products =
+                    await this.productRepository.findByIds(productIds);
+
+                const total =
+                    this.orderValidationService.validateAndCalculateTotal(
+                        cart.items,
+                        products
+                    );
+
+                const order = new Order(
+                    "pending",
+                    cart.items.map(item => ({
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        price: products.find(
+                            p => p.id === item.productId
+                        )!.price,
+                    })),
+                    total
+                );
+
+                const { id: orderId } =
+                    await this.orderRepository.create({
+                        userId,
+                        items: cart.items,
+                        total: order.total,
+                        status: order.status,
+                    });
+
+                for (const item of cart.items) {
+                    await this.productRepository.decrementStock(
+                        item.productId,
+                        item.quantity
+                    );
+                }
+
+                await this.clearCartUseCase.execute({ userId });
+
+                return {
+                    orderId,
+                    status: order.status,
+                    total: order.total,
+                };
+            }
+        );
+    }
+}
+export interface ApplicationEvent {
+
+    readonly name: string;
+    readonly occurredAt: Date;
+    readonly payload: unknown;
+}
+import { ApplicationEvent } from "./ApplicationEvent";
+
+export class OrderPlacedEvent implements ApplicationEvent {
+
+    readonly name = "order.placed";
+    readonly occurredAt = new Date();
+
+    constructor(
+
+        public readonly payload: {
+
+            orderId: string;
+            userId: string;
+            total: number;
+        }
+    ) {}
+}
+import { ApplicationEvent } from "../events/ApplicationEvent";
+
+export interface OutboxRepository {
+
+    save(event: ApplicationEvent): Promise<void>;
+}
+export interface TransactionManager {
+    runInTransaction<T>(fn: () => Promise<T>): Promise<T>;
+}
+export interface CartRepository {
+
+  findByUserId(
+    userId: string
+  ): Promise<{
+    userId: string;
+    items: { productId: string; quantity: number }[];
+  } | null>;
+
+  addItem(
+    userId: string,
+    productId: string,
+    quantity: number
+  ): Promise<void>;
+
+  removeItem(
+    userId: string,
+    productId: string
+  ): Promise<void>;
+
+  clear(
+    userId: string
+  ): Promise<void>;
+}
+export interface OrderRepository {
+    
+    findById(id: string): Promise<{
+        id: string;
+        status: string;
+        userId: string;
+    } | null>;
+
+    findByUserId(userId: string): Promise<{
+        id: string;
+        status: string;
+        total: number;
+        createdAt: Date;
+    }[]>;
+
+    findAll(): Promise<{
+        id: string;
+        userId: string;
+        status: string;
+        total: number;
+        createdAt: Date;
+    }[]>;
+
+    create(data: {
+        userId: string;
+        items: { productId: string; quantity: number }[];
+        total: number;
+        status: string;
+    }): Promise<{ id: string }>;
+
+    updateStatus(orderId: string, status: string): Promise<void>;
+}
+export type ProductData = {
+
+    id: string;
+    price: number;
+    stock: number;
+};
+
+export interface ProductRepository {
+
+    findById(id: string): Promise<{
+
+        id: string;
+        stock: number;
+    } | null>;
+
+    findByIds(ids: string[]): Promise<ProductData[]>;
+    decrementStock(productId: string, quantity: number): Promise<void>;
+}
+
+
+// FILE: src/middlewares/adminAuth.ts
+
+import { Request, Response, NextFunction } from "express"
+
+export const adminAuth = (req: Request, res: Response, next: NextFunction)=> {
+    // 1. Verifica se o usuário foi autenticado
+    if (!req.user || !req.user.role) {
+        return res.status(401).json({ error: "Acesso negado. Token inválido ou ausente." })
+    }
+    
+    // 2. Verifica se o papel (role) é 'admin'
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ error: "Acesso negado. Requer permissão de Administrador." })
+    }
+
+    next()
+}import { Request, Response, NextFunction } from "express"
+import jwt, { JwtPayload } from "jsonwebtoken"
+
+const JWT_SECRET = (process.env.JWT_SECRET || "supersecret") as string
+
+interface TokenPayload extends JwtPayload {
+    userId: string;
+    role: string;
+}
+
+export function authenticate(
+    req: Request,
+    res: Response,
+    next: NextFunction
+) {
+
+    const authHeader = req.headers.authorization
+    if (!authHeader) {
+        return res.status(401).json({ message: "Token missing" })
+    }
+
+    const parts = authHeader.split(" ")
+    if (parts.length !== 2) {
+        return res.status(401).json({ message: "Token malformed" })
+    }
+
+    const tokenCandidate = parts[1]
+    if (!tokenCandidate) {
+        return res.status(401).json({ message: "Token missing" })
+    }
+
+    const token: string = tokenCandidate
+    let decoded: JwtPayload
+
+    try {
+
+        decoded = jwt.verify(
+            token,
+            process.env.JWT_SECRET as string
+        ) as JwtPayload
+    } catch {
+        return res.status(401).json({ message: "Invalid token" })
+    }
+
+    if (
+        typeof decoded !== "object" ||
+        typeof decoded.id !== "string" ||
+        (decoded.role !== "user" && decoded.role !== "admin")
+    ) {
+        return res.status(401).json({ message: "Invalid token payload" })
+    }
+
+    req.user = {
+        id: decoded.id,
+        role: decoded.role
+    }
+
+    next()
+}
+
+import { Request, Response, NextFunction } from "express"
+
+export const isAdmin = (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    if (!req.user) {
+        return res.status(401).json({ error: "Usuário não autenticado" })
+    }
+
+    if (req.user.role !== "admin") {
+        return res
+            .status(403)
+            .json({ error: "Acesso negado: apenas administradores" })
+    }
+
+    next()
+}
+import { Router } from "express"
+import { authenticate } from "../middlewares/authMiddleware"
+import {
+    getCart,
+    addItemToCart,
+    removeItemFromCart,
+    clearCart
+} from "../controllers/cartController"
+
+const router = Router()
+
+// Todas as rotas de carrinho são protegidas por autenticação
+router.use(authenticate)
+
+router.get("/", getCart)
+router.post("/add", addItemToCart)
+router.post("/remove", removeItemFromCart)
+router.post("/clear", clearCart)
+
+export default router
+import { Router } from "express"
+import { authenticate } from "../middlewares/authMiddleware"
+import { isAdmin } from "../middlewares/isAdmin"
+import {
+    getAllUsers,
+    getUserById,
+    updateUser,
+    deleteUser,
+} from "../controllers/userController"
+
+const router = Router()
+
+// Todas as rotas de manipulação de usuários exigem Admin neste design
+router.get("/", authenticate, isAdmin, getAllUsers)
+router.get("/:id", authenticate, isAdmin, getUserById)
+router.put("/:id", authenticate, isAdmin, updateUser)
+router.delete("/:id", authenticate, isAdmin, deleteUser)
+
+export default router
+import { Router } from "express"
+import { registerUser, loginUser } from "../controllers/authController"
+
+const router = Router()
+
+router.post("/register", registerUser)
+router.post("/login", loginUser)
+
+export default routerimport { Router } from "express"
+import { authenticate } from "../middlewares/authMiddleware"
+import { isAdmin } from "../middlewares/isAdmin"
+import { getStats } from "../controllers/adminController"
+
+const router = Router()
+
+router.get("/stats", authenticate, isAdmin, getStats)
+
+export default router
+import { Router } from "express"
+import { authenticate } from "../middlewares/authMiddleware"
+import { isAdmin } from "../middlewares/isAdmin"
+import {
+    checkout,
+    createOrder,
+    getMyOrders,
+    getAllOrders,
+    updateOrderStatus,
+} from "../controllers/orderController"
+
+const router = Router()
+
+router.post("/checkout", authenticate, checkout)
+router.post("/", authenticate, createOrder)
+router.get("/my", authenticate, getMyOrders)
+
+// Rotas Admin
+router.get("/", authenticate, isAdmin, getAllOrders)
+router.put("/:id", authenticate, isAdmin, updateOrderStatus)
+
+export default router
+// FILE: src/routes/addressRoutes.ts
+
+import { Router } from "express"
+import { authenticate } from "../middlewares/authMiddleware" 
+import { 
+    createAddress, 
+    getAddresses, 
+    updateAddress, 
+    deleteAddress 
+} from "../controllers/addressController"
+
+const router = Router()
+
+// Todas as rotas de endereço são protegidas por autenticação
+router.use(authenticate)
+
+// POST /api/addresses - Criar endereço
+router.post("/", createAddress)
+
+// GET /api/addresses - Listar endereços
+router.get("/", getAddresses)
+
+// PUT /api/addresses/:id - Atualizar endereço
+router.put("/:id", updateAddress)
+
+// DELETE /api/addresses/:id - Deletar endereço
+router.delete("/:id", deleteAddress)
+
+export default router// FILE: src/routes/productRoutes.ts
+
+import { Router } from "express"
+import { authenticate } from "../middlewares/authMiddleware" 
+import { adminAuth } from "../middlewares/adminAuth" 
+import { 
+    createProduct, 
+    getAllProducts, 
+    updateProduct, 
+    deleteProduct 
+} from "../controllers/productController" // Importa a lógica do controller
+
+const router = Router()
+
+// GET /api/products - Rota pública para listar todos os produtos
+router.get("/", getAllProducts)
+
+// Rotas protegidas (apenas Admin)
+// POST /api/products - Criar produto
+router.post("/", authenticate, adminAuth, createProduct)
+
+// PUT /api/products/:id - Atualizar produto
+router.put("/:id", authenticate, adminAuth, updateProduct)
+
+// DELETE /api/products/:id - Deletar produto
+router.delete("/:id", authenticate, adminAuth, deleteProduct)
+
+export default router

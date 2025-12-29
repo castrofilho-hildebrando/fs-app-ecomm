@@ -1,0 +1,1416 @@
+import request from "supertest"
+import app from "../src/app"
+import { Product } from "../src/infra/models/Product"
+import { createTestUser, createTestProduct } from "./helpers/testHelpers"
+import { clearDatabase } from "./helpers/clearDatabase"
+import "./setup"
+
+describe("Product Routes", () => {
+
+    let adminToken: string
+    let userToken: string
+    let productId: string = ""
+
+    // Dados para um novo produto de teste
+    const newProductData = {
+        name: "Laptop Gamer",
+        description: "Máquina poderosa para jogos.",
+        price: 5000.00,
+        stock: 5,
+    }
+
+    beforeEach(async () => {
+
+        clearDatabase()
+
+        const [user, admin] = await Promise.all([
+            createTestUser("user", "main"),
+            createTestUser("admin", "main"),
+        ])
+
+        adminToken = admin.token
+        userToken = user.token
+
+        const product = await createTestProduct()
+        productId = product._id.toString()
+    })
+
+    describe("GET /api/products", () => {
+
+        it("deve listar todos os produtos (rota pública)", async () => {
+            // Rota pública, não requer token
+            const response = await request(app).get("/api/products") 
+
+            expect(response.status).toBe(200)
+            expect(response.body).toBeInstanceOf(Array)
+            // Deve encontrar o produto criado no beforeEach
+            expect(response.body.length).toBeGreaterThanOrEqual(1)
+        })
+    })
+
+    describe("POST /api/products (Admin)", () => {
+
+        it("deve permitir que o ADMIN crie um novo produto (201)", async () => {
+            const response = await request(app)
+                .post("/api/products")
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send(newProductData)
+
+            expect(response.status).toBe(201)
+            expect(response.body.product.name).toBe(newProductData.name)
+            expect(response.body.product.price).toBe(newProductData.price)
+
+            // Verifica se foi salvo no DB
+            const dbProduct = await Product.findById(response.body.product._id)
+            expect(dbProduct).not.toBeNull()
+        })
+
+        it("não deve permitir que o USUÁRIO COMUM crie um produto (403)", async () => {
+
+            const response = await request(app)
+                .post("/api/products")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send(newProductData)
+
+            expect(response.status).toBe(403)
+            expect(response.body.error).toContain("Requer permissão de Administrador")
+        })
+
+        it("deve retornar 401 se não houver token", async () => {
+
+            const response = await request(app)
+                .post("/api/products")
+                .send(newProductData)
+
+            expect(response.status).toBe(401)
+        })
+
+        it("deve falhar se dados obrigatórios (name/price) estiverem faltando (400)", async () => {
+            const response = await request(app)
+                .post("/api/products")
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({ description: "só descrição" }) // Faltando name e price
+
+            expect(response.status).toBe(400)
+            expect(response.body.error).toContain("obrigatórios") // Mensagem do productController
+        })
+    })
+
+    describe("PUT /api/products/:id", () => {
+        it("deve atualizar produto como admin", async () => {
+            const product = await createTestProduct()
+
+            const response = await request(app)
+                .put(`/api/products/${product._id}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({
+                    price: 299.99,
+                })
+
+            expect(response.status).toBe(200)
+            expect(response.body.product.price).toBe(299.99)
+        })
+    })
+
+    describe("DELETE /api/products/:id", () => {
+        it("deve deletar produto como admin", async () => {
+            const product = await createTestProduct()
+
+            const response = await request(app)
+                .delete(`/api/products/${product._id}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+        })
+    })
+})
+import request from "supertest"
+import app from "../src/app"
+import { createTestUser } from "./helpers/testHelpers"
+import { clearDatabase } from "./helpers/clearDatabase"
+import "./setup"
+
+clearDatabase()
+
+describe("Auth Routes", () => {
+    describe("POST /api/auth/register", () => {
+        it("deve registrar um novo usuário", async () => {
+            const response = await request(app)
+                .post("/api/auth/register")
+                .send({
+                    name: "Novo Usuário",
+                    email: "novo@example.com",
+                    password: "123456",
+                })
+
+            expect(response.status).toBe(201)
+            expect(response.body).toHaveProperty("token")
+            expect(response.body.user).toHaveProperty(
+                "email",
+                "novo@example.com",
+            )
+        })
+
+        it("não deve registrar usuário com email duplicado", async () => {
+            const { user } = await createTestUser()
+
+            const response = await request(app)
+                .post("/api/auth/register")
+                .send({
+                    name: "Hildebrando",
+                    email: user.email,
+                    password: "123456",
+                })
+
+            expect(response.status).toBe(409)
+        })
+
+
+        it("deve fazer login com credenciais válidas", async () => {
+            const { user } = await createTestUser()
+
+            const response = await request(app)
+                .post("/api/auth/login")
+                .send({
+                    email: user.email,
+                    password: "123456",
+                })
+
+            expect(response.status).toBe(200)
+            expect(response.body).toHaveProperty("token")
+        })
+
+        it("não deve fazer login com senha incorreta", async () => {
+            await createTestUser()
+
+            const response = await request(app).post("/api/auth/login").send({
+                email: "hildebrando@example.com",
+                password: "senha_errada",
+            })
+
+            expect(response.status).toBe(401)
+        })
+
+        it("não deve fazer login com email inexistente", async () => {
+            const response = await request(app).post("/api/auth/login").send({
+                email: "naoexiste@example.com",
+                password: "123456",
+            })
+
+            expect(response.status).toBe(401)
+        })
+    })
+})
+import request from "supertest"
+import mongoose from "mongoose"
+import app from "../src/app"
+import { createTestUser } from "./helpers/testHelpers"
+import { clearDatabase } from "./helpers/clearDatabase"
+import { Address, IAddress } from "../src/infra/models/Address" // Certifique-se de importar IAddress se estiver usando TypeScript
+import "./setup" 
+
+describe("Address Routes", () => {
+    let userToken: string = ""
+    let userId: string = ""
+    let anotherUserToken: string = ""
+    let anotherUserId: string = ""
+
+    // Data padrão para um endereço
+    const addressData = {
+        street: "Rua Teste, 123",
+        city: "Cidade Teste",
+        state: "SP",
+        zipCode: "12345-678",
+        country: "Brasil",
+    }
+
+    beforeEach(async () => {
+
+        clearDatabase()
+        
+        // Criar dois usuários para testar isolamento de dados
+        const [user, anotherUser] = await Promise.all([
+            createTestUser("user", "main"), 
+            createTestUser("user", "other"),
+        ])
+
+        userToken = user.token
+        userId = user.user._id.toString()
+        anotherUserToken = anotherUser.token
+        anotherUserId = anotherUser.user._id.toString()
+    })
+
+    // Helper para criar um endereço no DB diretamente
+    const createAddressInDB = async (id: string, data: any): Promise<IAddress> => {
+        const address = new Address({
+            userId: id,
+            ...data,
+        })
+        await address.save()
+        return address as IAddress
+    }
+
+    // =================================================================
+    // POST /api/addresses
+    // =================================================================
+    describe("POST /api/addresses", () => {
+        it("deve criar um novo endereço para o usuário (201)", async () => {
+            const response = await request(app)
+                .post("/api/addresses")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send(addressData)
+
+            expect(response.status).toBe(201)
+            expect(response.body.address.street).toBe(addressData.street)
+            expect(response.body.address.userId.toString()).toBe(userId)
+
+            const dbAddress = await Address.findById(response.body.address._id)
+            expect(dbAddress).not.toBeNull()
+        })
+
+        it("deve falhar se dados obrigatórios estiverem faltando (400)", async () => {
+            const response = await request(app)
+                .post("/api/addresses")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ street: addressData.street }) // Faltando city, state, zipCode
+
+            expect(response.status).toBe(400)
+            expect(response.body.error).toContain("obrigatórios")
+        })
+
+        it("deve falhar se não houver token (401)", async () => {
+            const response = await request(app)
+                .post("/api/addresses")
+                .send(addressData)
+
+            expect(response.status).toBe(401)
+        })
+        
+        it("deve definir como default e desativar o default anterior", async () => {
+            // 1. Cria um endereço padrão que deve ser desativado
+            const initialDefault = await createAddressInDB(userId, { ...addressData, isDefault: true, street: "Default Antigo" })
+
+            // 2. Cria um novo endereço padrão (novo default)
+            const response = await request(app)
+                .post("/api/addresses")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ ...addressData, isDefault: true, street: "Novo Default" })
+
+            expect(response.status).toBe(201)
+            expect(response.body.address.isDefault).toBe(true)
+
+            // 3. Verifica no DB se o default antigo foi desativado
+            const oldDefault = await Address.findById(initialDefault._id)
+            expect(oldDefault?.isDefault).toBe(false)
+        })
+    })
+
+    // =================================================================
+    // GET /api/addresses
+    // =================================================================
+    describe("GET /api/addresses", () => {
+        it("deve listar apenas endereços do usuário logado (200)", async () => {
+            // Endereço do usuário logado
+            const userAddress = await createAddressInDB(userId, addressData)
+            // Endereço de outro usuário
+            await createAddressInDB(anotherUserId, { ...addressData, street: "Rua Estranha" })
+
+            const response = await request(app)
+                .get("/api/addresses")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body).toHaveLength(1)
+            expect(response.body[0].street).toBe(userAddress.street)
+        })
+
+        it("deve retornar array vazio se não houver endereços (200)", async () => {
+            // Nenhuma criação de endereço
+            const response = await request(app)
+                .get("/api/addresses")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body).toHaveLength(0)
+        })
+
+        it("deve falhar se não houver token (401)", async () => {
+            const response = await request(app)
+                .get("/api/addresses")
+
+            expect(response.status).toBe(401)
+        })
+    })
+    
+    // =================================================================
+    // PUT /api/addresses/:id
+    // =================================================================
+    describe("PUT /api/addresses/:id", () => {
+        let address: IAddress
+
+        beforeEach(async () => {
+            address = await createAddressInDB(userId, addressData)
+        })
+
+        it("deve atualizar um endereço existente (200)", async () => {
+            const update = { street: "Nova Rua, 999", zipCode: "87654-321" }
+            
+            const response = await request(app)
+                .put(`/api/addresses/${address._id}`)
+                .set("Authorization", `Bearer ${userToken}`)
+                .send(update)
+
+            expect(response.status).toBe(200)
+            expect(response.body.address.street).toBe(update.street)
+            expect(response.body.address.zipCode).toBe(update.zipCode)
+            expect(response.body.address.city).toBe(address.city) // Não deve mudar
+        })
+
+        it("deve falhar ao atualizar endereço de outro usuário (404)", async () => {
+            // Tenta atualizar o endereço do user pelo anotherUser
+            const response = await request(app)
+                .put(`/api/addresses/${address._id}`)
+                .set("Authorization", `Bearer ${anotherUserToken}`)
+                .send({ street: "Tentativa de Fraude" })
+
+            expect(response.status).toBe(404)
+            expect(response.body.error).toContain("não pertence ao usuário")
+        })
+
+        it("deve falhar se não houver token (401)", async () => {
+            const update = { street: "Nova Rua" }
+            const response = await request(app)
+                .put(`/api/addresses/${address._id}`)
+                .send(update)
+
+            expect(response.status).toBe(401)
+        })
+        
+        it("deve tornar o endereço padrão e desativar o anterior", async () => {
+            // 1. Cria um segundo endereço, define o primeiro como default
+            await Address.findByIdAndUpdate(address._id, { isDefault: true })
+            const secondAddress = await createAddressInDB(userId, { ...addressData, street: "Segundo Endereço", isDefault: false })
+            
+            // 2. Atualiza o segundo endereço para ser o default
+            const response = await request(app)
+                .put(`/api/addresses/${secondAddress._id}`)
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ isDefault: true })
+
+            expect(response.status).toBe(200)
+            expect(response.body.address.isDefault).toBe(true)
+
+            // 3. Verifica no DB se o default original foi desativado
+            const oldDefault = await Address.findById(address._id)
+            expect(oldDefault?.isDefault).toBe(false)
+        })
+    })
+
+    // =================================================================
+    // DELETE /api/addresses/:id
+    // =================================================================
+    describe("DELETE /api/addresses/:id", () => {
+        let addressToDelete: IAddress
+
+        beforeEach(async () => {
+            addressToDelete = await createAddressInDB(userId, addressData)
+        })
+
+        it("deve deletar um endereço existente (200)", async () => {
+            const response = await request(app)
+                .delete(`/api/addresses/${addressToDelete._id}`)
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body.message).toContain("removido com sucesso")
+
+            const dbAddress = await Address.findById(addressToDelete._id)
+            expect(dbAddress).toBeNull()
+        })
+
+        it("deve falhar ao deletar endereço de outro usuário (404)", async () => {
+            const response = await request(app)
+                .delete(`/api/addresses/${addressToDelete._id}`)
+                .set("Authorization", `Bearer ${anotherUserToken}`)
+
+            expect(response.status).toBe(404)
+            expect(response.body.error).toContain("não pertence ao usuário")
+
+            // Verifica se o endereço ainda está no DB
+            const dbAddress = await Address.findById(addressToDelete._id)
+            expect(dbAddress).not.toBeNull()
+        })
+
+        it("deve falhar se não houver token (401)", async () => {
+            const response = await request(app)
+                .delete(`/api/addresses/${addressToDelete._id}`)
+
+            expect(response.status).toBe(401)
+        })
+    })
+})import mongoose from "mongoose"
+
+export async function clearDatabase() {
+
+    const collections = mongoose.connection.collections
+
+    for (const key in collections) {
+
+        await collections[key].deleteMany({})
+    }
+}
+import { User } from "../../src/infra/models/User"
+import { Product } from "../../src/infra/models/Product"
+import * as bcrypt from "bcrypt";
+import jwt from "jsonwebtoken"
+
+const JWT_SECRET = process.env.JWT_SECRET || "supersecret"
+
+export const createTestUser = async (role: "user" | "admin" = "user", suffix: string = Date.now().toString()): Promise<{ user: IUser, token: string }> => {
+
+    const passwordHash = await bcrypt.hash("123456", 10)
+    const baseEmail = role === "admin" ? "hildebrando@admin.com" : "hildebrando@example.com"
+    let email: string
+    if (role === "admin") {
+        email = `admin-${suffix}@example.com`
+    } else {
+        email = `user-${suffix}@example.com`
+    }
+
+    const user = await User.create({
+        name: "Hildebrando",
+        email,
+        passwordHash,
+        role,
+    })
+
+    const token = jwt.sign(
+    {
+        id: user._id.toString(),
+        role: user.role === "admin" ? "admin" : "user",
+    },
+        process.env.JWT_SECRET!,
+        { expiresIn: "1h" }
+    );
+
+    return { user, token }
+}
+
+export const createTestProduct = async (productData = {}) => {
+    return await Product.create({
+        name: "Produto Teste",
+        description: "Descrição do produto teste",
+        price: 99.99,
+        stock: 10,
+        ...productData,
+    })
+}import request from "supertest"
+import app from "../src/app"
+import { createTestUser } from "./helpers/testHelpers"
+import { clearDatabase } from "./helpers/clearDatabase"
+import "./setup"
+
+describe("User Routes", () => {
+    let adminToken: string
+    let userToken: string
+    let userId: string
+
+    beforeEach(async () => {
+
+        clearDatabase()
+        const admin = await createTestUser("admin")
+        const user = await createTestUser("user")
+        adminToken = admin.token
+        userToken = user.token
+        userId = user.user._id.toString()
+    })
+
+    describe("GET /api/users", () => {
+        it("deve listar usuários como admin", async () => {
+            const response = await request(app)
+                .get("/api/users")
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+            expect(Array.isArray(response.body)).toBe(true)
+            expect(response.body.length).toBeGreaterThanOrEqual(2) // admin + user
+        })
+
+        it("não deve retornar hash de senha", async () => {
+            const response = await request(app)
+                .get("/api/users")
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body[0]).not.toHaveProperty("passwordHash")
+        })
+
+        it("não deve listar usuários sem ser admin", async () => {
+            const response = await request(app)
+                .get("/api/users")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(403)
+        })
+
+        it("não deve listar usuários sem autenticação", async () => {
+            const response = await request(app).get("/api/users")
+
+            expect(response.status).toBe(401)
+        })
+    })
+
+    describe("GET /api/users/:id", () => {
+        it("deve buscar usuário por ID como admin", async () => {
+            const response = await request(app)
+                .get(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body).toHaveProperty("email")
+            expect(response.body).toHaveProperty("name")
+            expect(response.body).not.toHaveProperty("passwordHash")
+        })
+
+        it("deve retornar 404 para usuário inexistente", async () => {
+            const fakeId = "507f1f77bcf86cd799439011"
+
+            const response = await request(app)
+                .get(`/api/users/${fakeId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(404)
+        })
+
+        it("não deve buscar usuário sem ser admin", async () => {
+            const response = await request(app)
+                .get(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(403)
+        })
+
+        it("não deve buscar usuário sem autenticação", async () => {
+            const response = await request(app).get(`/api/users/${userId}`)
+
+            expect(response.status).toBe(401)
+        })
+    })
+
+    describe("PUT /api/users/:id", () => {
+        it("deve atualizar usuário como admin", async () => {
+            const response = await request(app)
+                .put(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({ name: "Nome Atualizado" })
+
+            expect(response.status).toBe(200)
+            expect(response.body.user.name).toBe("Nome Atualizado")
+            expect(response.body.message).toBe("Usuário atualizado com sucesso!")
+        })
+
+        it("não deve retornar hash de senha ao atualizar", async () => {
+            const response = await request(app)
+                .put(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({ name: "Nome Atualizado" })
+
+            expect(response.status).toBe(200)
+            expect(response.body.user).not.toHaveProperty("passwordHash")
+        })
+
+        it("deve atualizar múltiplos campos", async () => {
+            const response = await request(app)
+                .put(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({
+                    name: "Novo Nome",
+                    email: "novoemail@example.com",
+                })
+
+            expect(response.status).toBe(200)
+            expect(response.body.user.name).toBe("Novo Nome")
+            expect(response.body.user.email).toBe("novoemail@example.com")
+        })
+
+        it("deve retornar 404 para usuário inexistente", async () => {
+            const fakeId = "507f1f77bcf86cd799439011"
+
+            const response = await request(app)
+                .put(`/api/users/${fakeId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({ name: "Nome" })
+
+            expect(response.status).toBe(404)
+        })
+
+        it("não deve atualizar usuário sem ser admin", async () => {
+            const response = await request(app)
+                .put(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ name: "Nome Atualizado" })
+
+            expect(response.status).toBe(403)
+        })
+
+        it("não deve atualizar usuário sem autenticação", async () => {
+            const response = await request(app)
+                .put(`/api/users/${userId}`)
+                .send({ name: "Nome Atualizado" })
+
+            expect(response.status).toBe(401)
+        })
+    })
+
+    describe("DELETE /api/users/:id", () => {
+        it("deve deletar usuário como admin", async () => {
+            const response = await request(app)
+                .delete(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body.message).toBe("Usuário removido com sucesso!")
+        })
+
+        it("usuário deletado não deve mais existir", async () => {
+            await request(app)
+                .delete(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            const response = await request(app)
+                .get(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(404)
+        })
+
+        it("deve retornar 404 para usuário inexistente", async () => {
+            const fakeId = "507f1f77bcf86cd799439011"
+
+            const response = await request(app)
+                .delete(`/api/users/${fakeId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(404)
+        })
+
+        it("não deve deletar usuário sem ser admin", async () => {
+            const response = await request(app)
+                .delete(`/api/users/${userId}`)
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(403)
+        })
+
+        it("não deve deletar usuário sem autenticação", async () => {
+            const response = await request(app).delete(`/api/users/${userId}`)
+
+            expect(response.status).toBe(401)
+        })
+    })
+})import mongoose from "mongoose";
+import { MongoMemoryServer } from "mongodb-memory-server";
+
+import { makeCheckoutUseCase } from "../../src/infra/factories/checkoutFactory";
+import { MongoOutboxDispatcher } from "../../src/infra/outbox/MongoOutboxDispatcher";
+
+import { Cart } from "../../src/infra/models/Cart";
+import { Product } from "../../src/infra/models/Product";
+import { Outbox } from "../../src/infra/models/Outbox";
+
+let mongo: MongoMemoryServer;
+
+beforeAll(async () => {
+    mongo = await MongoMemoryServer.create();
+
+    if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(mongo.getUri());
+    }
+});
+
+afterAll(async () => {
+    await mongoose.disconnect();
+    await mongo.stop();
+});
+
+afterEach(async () => {
+    await mongoose.connection.db.dropDatabase();
+});
+
+describe("Checkout + Outbox integration", () => {
+
+    it("should persist outbox event and dispatch it correctly", async () => {
+
+        // Arrange
+        const userId = new mongoose.Types.ObjectId();
+        const productId = new mongoose.Types.ObjectId();
+
+        await Product.create({
+            _id: productId,
+            name: "Notebook",
+            price: 3000,
+            stock: 10,
+        });
+
+        await Cart.create({
+            userId,
+            items: [
+                {
+                    productId,
+                    quantity: 1,
+                },
+            ],
+        });
+
+        const checkoutUseCase = makeCheckoutUseCase();
+
+        // Act — executar checkout
+        const result = await checkoutUseCase.execute({ userId });
+
+        // Assert — pedido criado
+        expect(result.orderId).toBeDefined();
+        expect(result.total).toBe(3000);
+        expect(result.status).toBe("pending");
+
+        // Assert — evento salvo no Outbox
+        const eventsBefore = await Outbox.find();
+
+        expect(eventsBefore).toHaveLength(1);
+        expect(eventsBefore[0].name).toBe("order.placed");
+        expect(eventsBefore[0].processed).toBe(false);
+
+        // Act — dispatcher
+        const dispatcher = new MongoOutboxDispatcher();
+        await dispatcher.dispatch();
+
+        // Assert — evento processado
+        const eventAfter = await Outbox.findById(eventsBefore[0]._id);
+
+        expect(eventAfter?.processed).toBe(true);
+        expect(eventAfter?.processedAt).toBeDefined();
+    });
+
+});
+import request from "supertest"
+import mongoose from "mongoose"
+import app from "../src/app"
+import { createTestUser, createTestProduct } from "./helpers/testHelpers"
+import { clearDatabase } from "./helpers/clearDatabase"
+import { Order } from "../src/infra/models/Order"
+import { Cart } from "../src/infra/models/Cart"
+import "./setup"
+
+describe("Admin Routes", () => {
+    let adminToken: string
+    let userToken: string
+    let product1: any
+
+    beforeEach(async () => {
+
+        clearDatabase()
+        const admin = await createTestUser("admin")
+        const user = await createTestUser("user")
+        adminToken = admin.token
+        userToken = user.token
+        product1 = await createTestProduct({ price: 100 }) // Produto base para pedidos
+    })
+
+    describe("GET /api/admin/stats", () => {
+        it("deve retornar estatísticas completas para o admin", async () => {
+            // Setup: Criar dados para popular as estatísticas
+
+            // 1. Produtos (product1 já existe do beforeEach)
+            await createTestProduct({ price: 50 })
+
+            // 2. Pedido
+            const order = new Order({
+                userId: new mongoose.Types.ObjectId(),
+                items: [{ productId: product1._id, quantity: 2 }],
+                total: 200,
+                status: "completed",
+            })
+            await order.save()
+
+            // 3. Carrinho
+            const cart = new Cart({
+                userId: new mongoose.Types.ObjectId(),
+                items: [{ productId: product1._id, quantity: 1 }],
+            })
+            await cart.save()
+
+            const response = await request(app)
+                .get("/api/admin/stats")
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+
+            // Verificações de estrutura e valores
+            expect(response.body).toHaveProperty("users")
+            // Admin (1) + User (1) no beforeEach = 2
+            expect(response.body.users.total).toBeGreaterThanOrEqual(2)
+
+            expect(response.body).toHaveProperty("products")
+            // product1 + product2 no setup = 2
+            expect(response.body.products.total).toBe(2)
+
+            expect(response.body).toHaveProperty("orders")
+            expect(response.body.orders.total).toBe(1)
+            expect(response.body.orders.revenueTotal).toBe(200)
+
+            expect(response.body).toHaveProperty("carts")
+            expect(response.body.carts.avgItems).toBe(1)
+        })
+
+        it("deve filtrar estatísticas por intervalo de datas", async () => {
+            // Setup: Data de Hoje (usaremos 2025-12-15 como base)
+            const TODAY = new Date("2025-12-15T12:00:00.000Z")
+
+            // Pedido A: DENTRO do período de filtro (Total 100, Status: paid)
+            const orderA = new Order({
+                userId: new mongoose.Types.ObjectId(),
+                items: [{ productId: product1._id, quantity: 1 }],
+                total: 100,
+                status: "paid",
+                createdAt: TODAY, // Hoje
+            })
+            await orderA.save()
+
+            // Pedido B: FORA do período de filtro (Total 500, Status: completed)
+            const YESTERDAY = new Date("2025-12-14T12:00:00.000Z") // Ontem
+            const orderB = new Order({
+                userId: new mongoose.Types.ObjectId(),
+                items: [{ productId: product1._id, quantity: 5 }],
+                total: 500,
+                status: "completed",
+                createdAt: YESTERDAY,
+            })
+            await orderB.save()
+
+            // DEFINIR O FILTRO: Apenas para "Hoje"
+            const filterStart = "2025-12-15T00:00:00.000Z"
+            const filterEnd = "2025-12-15T23:59:59.999Z"
+
+            const response = await request(app)
+                .get(
+                    `/api/admin/stats?startDate=${filterStart}&endDate=${filterEnd}`,
+                )
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+
+            // Deve contar APENAS o Pedido A
+            expect(response.body.orders.total).toBe(1)
+            expect(response.body.orders.revenueTotal).toBe(100)
+
+            // O status 'completed' do Pedido B não deve aparecer
+            const paidStatus = response.body.orders.byStatus.find(
+                (s: any) => s._id === "paid",
+            )
+            const completedStatus = response.body.orders.byStatus.find(
+                (s: any) => s._id === "completed",
+            )
+
+            expect(paidStatus?.count).toBe(1)
+            expect(completedStatus).toBeUndefined() // Verifica se o pedido de ontem foi excluído
+        })
+
+        it("não deve permitir acesso a usuário comum", async () => {
+            const response = await request(app)
+                .get("/api/admin/stats")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(403)
+        })
+
+        it("não deve permitir acesso sem autenticação", async () => {
+            const response = await request(app).get("/api/admin/stats")
+
+            expect(response.status).toBe(401)
+        })
+    })
+})
+import request from "supertest"
+import app from "../src/app"
+import { clearDatabase } from "./helpers/clearDatabase"
+import { createTestUser, createTestProduct } from "./helpers/testHelpers"
+import "./setup"
+
+clearDatabase()
+
+describe("Cart Routes", () => {
+    let userToken: string
+    let userId: string
+    let productId: string
+
+    beforeEach(async () => {
+        const user = await createTestUser("user")
+        userToken = user.token
+        userId = user.user._id.toString()
+
+        const product = await createTestProduct()
+        productId = product._id.toString()
+    })
+
+    describe("GET /api/cart", () => {
+        it("deve retornar carrinho vazio para novo usuário", async () => {
+            const response = await request(app)
+                .get("/api/cart")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body.items || []).toHaveLength(0)
+        })
+
+        it("não deve acessar carrinho sem autenticação", async () => {
+            const response = await request(app).get("/api/cart")
+
+            expect(response.status).toBe(401)
+        })
+    })
+
+    describe("POST /api/cart/add", () => {
+        it("deve adicionar item ao carrinho", async () => {
+            const response = await request(app)
+                .post("/api/cart/add")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({
+                    productId,
+                    quantity: 2,
+                })
+
+            expect(response.status).toBe(200)
+            expect(response.body.cart.items).toHaveLength(1)
+            expect(response.body.cart.items[0].quantity).toBe(2)
+        })
+
+        it("deve incrementar quantidade se produto já existe", async () => {
+            // Adiciona pela primeira vez
+            await request(app)
+                .post("/api/cart/add")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId, quantity: 2 })
+
+            // Adiciona novamente
+            const response = await request(app)
+                .post("/api/cart/add")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId, quantity: 3 })
+
+            expect(response.status).toBe(200)
+            expect(response.body.cart.items).toHaveLength(1)
+            expect(response.body.cart.items[0].quantity).toBe(5)
+        })
+
+        it("não deve adicionar sem autenticação", async () => {
+            const response = await request(app)
+                .post("/api/cart/add")
+                .send({ productId, quantity: 2 })
+
+            expect(response.status).toBe(401)
+        })
+
+        it("não deve adicionar item sem productId ou quantity", async () => {
+            const response = await request(app)
+                .post("/api/cart/add")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId, quantity: undefined }) // Falta quantity (ou productId)
+
+            // Esperar 400 se o controlador for implementado para validar o payload
+            // Atualmente o controller falharia com 500 ou erro de Mongoose, mas 400 é o correto.
+            expect(response.status).toBe(400)
+        })
+
+        it("não deve adicionar produto que não existe", async () => {
+            // ID inexistente (válido no formato Mongoose, mas não no DB)
+            const fakeProductId = "507f1f77bcf86cd799439011"
+
+            const response = await request(app)
+                .post("/api/cart/add")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId: fakeProductId, quantity: 1 })
+
+            // Se o controlador for corrigido para validar o Product ID no DB antes de adicionar.
+            expect(response.status).toBe(404)
+        })
+    })
+
+    describe("POST /api/cart/remove", () => {
+        it("deve remover item do carrinho", async () => {
+            // Adiciona item
+            await request(app)
+                .post("/api/cart/add")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId, quantity: 2 })
+
+            // Remove item
+            const response = await request(app)
+                .post("/api/cart/remove")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId })
+
+            expect(response.status).toBe(200)
+            expect(response.body.cart.items).toHaveLength(0)
+        })
+
+        it("deve retornar 404 se carrinho não existe", async () => {
+            const response = await request(app)
+                .post("/api/cart/remove")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId })
+
+            expect(response.status).toBe(404)
+        })
+    })
+
+    describe("POST /api/cart/clear", () => {
+        it("deve limpar carrinho", async () => {
+            // Adiciona itens
+            await request(app)
+                .post("/api/cart/add")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ productId, quantity: 2 })
+
+            // Limpa carrinho
+            const response = await request(app)
+                .post("/api/cart/clear")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body.cart.items).toHaveLength(0)
+        })
+
+        it("deve retornar 404 se carrinho não existe", async () => {
+            const response = await request(app)
+                .post("/api/cart/clear")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(404)
+        })
+    })
+})
+import mongoose from "mongoose"
+import { MongoMemoryReplSet } from "mongodb-memory-server"
+import * as dotenv from "dotenv";
+
+dotenv.config();
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-jwt-secret";
+
+let replset: MongoMemoryReplSet
+
+beforeAll(async () => {
+
+    replset = await MongoMemoryReplSet.create({
+
+        replSet: { count: 1 },
+    })
+
+    const uri = replset.getUri()
+    await mongoose.connect(uri)
+})
+
+afterAll(async () => {
+
+    await mongoose.disconnect()
+    await replset.stop()
+})
+import request from "supertest"
+import app from "../src/app"
+import { createTestUser, createTestProduct } from "./helpers/testHelpers"
+import { clearDatabase } from "./helpers/clearDatabase"
+import mongoose from "mongoose"
+import { Cart } from "../src/infra/models/Cart"
+import { Order } from "../src/infra/models/Order"
+import { Product } from "../src/infra/models/Product" 
+import "./setup" 
+
+describe("Order Routes", () => {
+
+    // Inicializar variáveis com strings vazias para evitar ReferenceError caso o beforeEach falhe
+    let userToken: string = "" 
+    let adminToken: string = ""
+    let userId: string = ""
+    let adminId: string = ""
+    let productId: string = ""
+    const PRODUCT_PRICE = 10
+    const PRODUCT_STOCK = 5
+    
+    // Configuração robusta e paralela
+    beforeEach(async () => {
+
+        clearDatabase()
+        // Cria usuários e um produto base de forma eficiente
+        const [user, admin, product] = await Promise.all([
+            createTestUser("user"),
+            createTestUser("admin"),
+            createTestProduct({ price: PRODUCT_PRICE, stock: PRODUCT_STOCK })
+        ])
+
+        userToken = user.token
+        userId = user.user._id.toString()
+        adminToken = admin.token
+        adminId = admin.user._id.toString()
+
+        productId = product._id.toString() // ID do produto base preenchido aqui
+    })
+
+    // --- POST /api/orders/checkout ---
+    describe("POST /api/orders/checkout", () => {
+
+        it("deve criar um pedido com sucesso quando o estoque for suficiente", async () => {
+            const { user, token } = await createTestUser()
+
+            const product = await Product.create({
+                name: "Produto Teste",
+                price: 100,
+                stock: 10,
+            })
+
+            await Cart.create({
+                userId: user._id,
+                items: [
+                    {
+                        productId: product._id,
+                        quantity: 2,
+                    },
+                ],
+            })
+
+            const response = await request(app)
+                .post("/api/orders/checkout")
+                .set("Authorization", `Bearer ${token}`)
+
+            expect(response.status).toBe(201)
+            expect(response.body).toHaveProperty("order")
+            expect(response.body.order.total).toBe(200)
+
+            const productAfter = await Product.findById(product._id)
+            expect(productAfter!.stock).toBe(8)
+
+            const cartAfter = await Cart.findOne({ userId: user._id })
+            expect(cartAfter!.items.length).toBe(0)
+        })
+
+        it("não deve criar pedido se o carrinho estiver vazio", async () => {
+            const { user, token } = await createTestUser()
+
+            await Cart.create({
+                userId: user._id,
+                items: [],
+            })
+
+            const response = await request(app)
+                .post("/api/orders/checkout")
+                .set("Authorization", `Bearer ${token}`)
+
+            expect(response.status).toBe(400)
+            expect(response.body.error).toContain("Carrinho vazio")
+        })
+
+        it("não deve criar pedido se algum produto não existir", async () => {
+            const { user, token } = await createTestUser()
+
+            const fakeProductId = new mongoose.Types.ObjectId()
+
+            await Cart.create({
+                userId: user._id,
+                items: [
+                    {
+                        productId: fakeProductId,
+                        quantity: 1,
+                    },
+                ],
+            })
+
+            const response = await request(app)
+                .post("/api/orders/checkout")
+                .set("Authorization", `Bearer ${token}`)
+
+            expect(response.status).toBe(400)
+            expect(response.body.error).toContain("Produto")
+            expect(response.body.error).toContain("não encontrado")
+        })
+
+        it("não deve criar pedido se o estoque for insuficiente", async () => {
+            const { user, token } = await createTestUser()
+
+            const product = await Product.create({
+                name: "Produto com Estoque Baixo",
+                price: 50,
+                stock: 1,
+            })
+
+            await Cart.create({
+                userId: user._id,
+                items: [
+                    {
+                        productId: product._id,
+                        quantity: 5, // maior que o estoque
+                    },
+                ],
+            })
+
+            const response = await request(app)
+                .post("/api/orders/checkout")
+                .set("Authorization", `Bearer ${token}`)
+
+            expect(response.status).toBe(400)
+            expect(response.body.error).toContain("Estoque insuficiente")
+
+            // garante que o estoque NÃO foi alterado
+            const productAfterFailure = await Product.findById(product._id)
+            expect(productAfterFailure!.stock).toBe(1)
+
+            // garante que o pedido NÃO foi criado
+            const orders = await Order.find({ userId: user._id })
+            expect(orders.length).toBe(0)
+        })
+
+    })
+
+
+    // --- GET /api/orders/my ---
+    describe("GET /api/orders/my", () => {
+        it("deve listar apenas os pedidos do usuário logado", async () => {
+            // Cria um pedido para este usuário
+            const myOrder = new Order({
+                userId,
+                items: [],
+                total: 100,
+                status: "pending",
+            })
+            await myOrder.save()
+
+            // Cria um pedido para outro usuário
+            await new Order({
+                userId: new mongoose.Types.ObjectId(),
+                items: [],
+                total: 50,
+                status: "completed",
+            }).save()
+
+            const response = await request(app)
+                .get("/api/orders/my")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body).toHaveLength(1)
+            expect(response.body[0]._id).toBe(myOrder._id.toString())
+        })
+    })
+
+    // --- GET /api/orders (Admin) ---
+    describe("GET /api/orders (Admin)", () => {
+        it("deve listar todos os pedidos se for admin", async () => {
+            await new Order({ userId, items: [], total: 100 }).save()
+            await new Order({
+                userId: new mongoose.Types.ObjectId(),
+                items: [],
+                total: 200,
+            }).save()
+
+            const response = await request(app)
+                .get("/api/orders")
+                .set("Authorization", `Bearer ${adminToken}`)
+
+            expect(response.status).toBe(200)
+            expect(response.body).toHaveLength(2)
+        })
+
+        it("não deve permitir acesso a usuário comum", async () => {
+            const response = await request(app)
+                .get("/api/orders")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(response.status).toBe(403)
+        })
+
+        // --- PUT /api/orders/:id ---
+        it("deve atualizar o status do pedido como admin", async () => {
+ 
+            const { user, token: userToken } = await createTestUser()
+            const { token: adminToken } = await createTestUser("admin")
+
+            const product = await Product.create({
+                name: "Produto Teste",
+                price: 100,
+                stock: 10,
+            })
+
+            await Cart.create({
+                userId: user._id,
+                items: [
+                    {
+                        productId: product._id,
+                        quantity: 1,
+                    },
+                ],
+            })
+
+            // checkout como user
+            const checkoutResponse = await request(app)
+                .post("/api/orders/checkout")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(checkoutResponse.status).toBe(201)
+
+            const orderId = checkoutResponse.body.order._id
+
+            // 🔹 admin marca como pago
+            const paidResponse = await request(app)
+                .put(`/api/orders/${orderId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({ status: "paid" })
+
+            expect(paidResponse.status).toBe(200)
+            expect(paidResponse.body.status).toBe("paid")
+
+            // 🔹 admin envia
+            const shippedResponse = await request(app)
+                .put(`/api/orders/${orderId}`)
+                .set("Authorization", `Bearer ${adminToken}`)
+                .send({ status: "shipped" })
+
+            expect(shippedResponse.status).toBe(200)
+            expect(shippedResponse.body.status).toBe("shipped")
+        })
+
+        it("não deve permitir que usuário comum atualize status", async () => {
+            const { user, token: userToken } = await createTestUser()
+            const { token: adminToken } = await createTestUser("admin")
+
+            const product = await Product.create({
+                name: "Produto Teste",
+                price: 100,
+                stock: 10,
+            })
+
+            await Cart.create({
+                userId: user._id,
+                items: [
+                    {
+                        productId: product._id,
+                        quantity: 1,
+                    },
+                ],
+            })
+
+            // pedido nasce via checkout (como user)
+            const checkoutResponse = await request(app)
+                .post("/api/orders/checkout")
+                .set("Authorization", `Bearer ${userToken}`)
+
+            expect(checkoutResponse.status).toBe(201)
+
+            const orderId = checkoutResponse.body.order._id
+
+            // tentativa de update como usuário comum
+            const response = await request(app)
+                .put(`/api/orders/${orderId}`)
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ status: "shipped" })
+
+            expect(response.status).toBe(403)
+        })
+
+    })
+})

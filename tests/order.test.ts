@@ -3,9 +3,9 @@ import app from "../src/app"
 import { createTestUser, createTestProduct } from "./helpers/testHelpers"
 import { clearDatabase } from "./helpers/clearDatabase"
 import mongoose from "mongoose"
-import { Cart } from "../src/models/Cart"
-import { Order } from "../src/models/Order"
-import { Product } from "../src/models/Product" 
+import { Cart } from "../src/infra/models/Cart"
+import { Order } from "../src/infra/models/Order"
+import { Product } from "../src/infra/models/Product" 
 import "./setup" 
 
 describe("Order Routes", () => {
@@ -211,6 +211,7 @@ describe("Order Routes", () => {
 
         // --- PUT /api/orders/:id ---
         it("deve atualizar o status do pedido como admin", async () => {
+ 
             const { user, token: userToken } = await createTestUser()
             const { token: adminToken } = await createTestUser("admin")
 

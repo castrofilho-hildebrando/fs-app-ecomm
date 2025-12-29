@@ -1,9 +1,9 @@
-import { ApplicationEvent } from "./ApplicationEvent";
+import { ApplicationEvent } from "./ApplicationEvent"
 
 export class OrderPlacedEvent implements ApplicationEvent {
 
-    readonly name = "order.placed";
-    readonly occurredAt = new Date();
+    readonly name = "order.placed"
+    readonly occurredAt = new Date()
 
     constructor(
 

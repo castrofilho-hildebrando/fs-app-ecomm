@@ -1,18 +1,12 @@
 import { Router } from "express"
-import { authenticate } from "../middlewares/authMiddleware"
-import {
-    getCart,
-    addToCart,
-    removeFromCart
-} from "../controllers/cartController"
+import { getCart, addItemToCart, removeItemFromCart, clearCart } from "../controllers/cartController"
+import { authenticate } from "../middlewares/authMiddleware" // Corrigido para plural
 
 const router = Router()
 
-// Todas as rotas de carrinho são protegidas por autenticação
-router.use(authenticate)
-
-router.get("/", getCart)
-router.post("/add", addToCart)
-router.post("/remove", removeFromCart)
+router.get("/", authenticate, getCart)
+router.post("/add", authenticate, addItemToCart)
+router.post("/remove", authenticate, removeItemFromCart) // Corrigido nome da função
+router.post("/clear", authenticate, clearCart)
 
 export default router

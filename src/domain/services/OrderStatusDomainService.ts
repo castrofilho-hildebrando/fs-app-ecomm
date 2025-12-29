@@ -1,4 +1,5 @@
-import { DomainError } from "../errors/DomainError"
+import { InvalidStatusTransactionError } from "../errors/InvalidStatusTransactionError"
+import { OnlyAdminCanChangeOrderStatusError } from "../errors/OnlyAdminCanChangeOrderStatusError"
 
 const allowedTransitions: Record<string, string[]> = {
     pending: ["paid"],
@@ -15,8 +16,8 @@ export class OrderStatusDomainService {
         const allowed = allowedTransitions[currentStatus] || []
 
         if (!allowed.includes(newStatus)) {
-            throw new DomainError(
-                `Invalid status transition from ${currentStatus} to ${newStatus}`
+            throw new InvalidStatusTransactionError(
+                'INVALID_STATUS_TRANSACTION', `Invalid status transition from ${currentStatus} to ${newStatus}`
             )
         }
     }
@@ -27,7 +28,7 @@ export class OrderStatusDomainService {
         newStatus: string
     ) {
         if (actorRole !== "admin") {
-            throw new DomainError("Only admin can change order status")
+            throw new OnlyAdminCanChangeOrderStatusError("ONLY_ADMIN_CAN_CHANGE_ORDER_STATUS", "Only admin can change order status")
         }
     }
 }
